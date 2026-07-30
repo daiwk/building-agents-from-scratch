@@ -1,0 +1,23 @@
+{
+  "name": "building-agents-from-scratch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny, readable agent architecture inspired by pi-agent.",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "example": "tsx examples/quick-start.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
