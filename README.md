@@ -1,5 +1,7 @@
 # Building Agents from Scratch
 
+📚 **[在线阅读完整中文文档](https://daiwk.github.io/building-agents-from-scratch/)**
+
 一个把 Agent 核心逻辑重新写到足够小的教学项目，同时提供 Python、TypeScript、
 Notebook 和直接使用 [pi-agent](https://github.com/earendil-works/pi) 的对照版本。
 
