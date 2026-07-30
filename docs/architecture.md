@@ -57,6 +57,23 @@ Assistant([Text("答案是 42")])
 
 历史记录同时是短期 memory，也是模型下一步决策所看到的环境状态。
 
+## Web UI 如何接入
+
+Web UI 没有绕过核心，也没有另写一套 Agent：
+
+```text
+Browser
+  └─ POST /api/chat
+       └─ Agent.run()
+            └─ AgentEvent
+                 └─ NDJSON response
+                      └─ Conversation + Execution trace
+```
+
+每个浏览器会话对应一个内存中的 `Agent` 实例。服务端逐行输出 NDJSON，因此工具开始、
+工具结束和模型轮次会立即出现在右侧轨迹中。以后把 provider 升级为 token streaming 时，
+同一条通道也可以继续发送 text delta，不需要更换前端协议。
+
 ## 为什么 provider 返回完整消息
 
 首版 `ModelProvider.generate()` 返回完整 `AssistantMessage`，以便初学者先看清

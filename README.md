@@ -1,6 +1,7 @@
 # Building Agents from Scratch
 
-一个基于 [pi-agent](https://github.com/earendil-works/pi) 思想、但把核心逻辑重新写到足够小的 TypeScript 教学项目。
+一个把 Agent 核心逻辑重新写到足够小的教学项目，同时提供 Python、TypeScript、
+Notebook 和直接使用 [pi-agent](https://github.com/earendil-works/pi) 的对照版本。
 
 目标不是再造一个功能最多的 Agent 框架，而是让初学者能在十分钟内回答：
 
@@ -29,20 +30,26 @@ flowchart LR
 普通聊天只走一次 `用户 → 模型 → 回答`。Agent 多了一个反馈环：
 模型可以暂停回答、请求执行工具；程序执行后把结果加入消息历史，再调用模型。
 
-真正的核心只有 [`src/core/agent-loop.ts`](src/core/agent-loop.ts)。建议按以下顺序阅读：
+第一次学习建议先运行
+[`notebooks/agent_from_scratch.ipynb`](notebooks/agent_from_scratch.ipynb)，再选择阅读
+Python 或 TypeScript 核心：
 
-1. [`src/core/types.ts`](src/core/types.ts)：循环中流动的数据；
-2. [`src/core/agent-loop.ts`](src/core/agent-loop.ts)：Agent 算法；
-3. [`src/core/agent.ts`](src/core/agent.ts)：保存对话状态的便捷外壳；
-4. [`src/providers/minimax.ts`](src/providers/minimax.ts)：模型协议适配；
-5. [`src/tools/calculator.ts`](src/tools/calculator.ts)：一个工具的完整结构。
+1. [`python/from_scratch_agent/agent.py`](python/from_scratch_agent/agent.py)：语法负担最小的同步循环；
+2. [`src/core/types.ts`](src/core/types.ts)：带中文语法解释的数据类型；
+3. [`src/core/agent-loop.ts`](src/core/agent-loop.ts)：异步 Agent 算法；
+4. [`examples/pi-agent-direct.ts`](examples/pi-agent-direct.ts)：同一案例的成熟库写法。
+
+完整使用说明由 MkDocs Material 构建。合并到 `main` 后，GitHub Actions 会发布到
+`https://daiwk.github.io/building-agents-from-scratch/`。
 
 ## 快速开始
 
-要求 Node.js 20+。
+要求 Node.js 22.19+。Python 版本要求 3.11+。
 
 ```bash
 npm install
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-docs.txt
 cp .env.example .env
 ```
 
@@ -54,7 +61,16 @@ MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic/v1
 AGENT_PROVIDER=minimax
 ```
 
-然后运行：
+然后运行网页版：
+
+```bash
+npm run web
+```
+
+浏览器访问 [http://127.0.0.1:3000](http://127.0.0.1:3000)。页面左侧是对话，
+右侧会按真实顺序展示 model、tool call、tool result 和最终回答。
+
+如果更喜欢终端，也可以运行：
 
 ```bash
 npm run dev
@@ -67,6 +83,16 @@ npm run dev
 ```
 
 终端会同时展示 tool call、tool result 和最终答案，因此可以直接观察整个 loop。
+
+### 不用 API Key，先跑 Python / Notebook
+
+```bash
+PYTHONPATH=python .venv/bin/python -m unittest discover -s python/tests -v
+.venv/bin/jupyter notebook notebooks/agent_from_scratch.ipynb
+```
+
+Notebook 默认使用可预测的假模型，不访问网络、不消耗额度。最后一个真实 MiniMax
+单元格还需要显式设置 `RUN_LIVE_MINIMAX=1` 才会执行。
 
 MiniMax 后端默认使用国内站官方
 [Anthropic-compatible Messages API](https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic)：
@@ -104,6 +130,21 @@ for await (const event of agent.run("1234 * 5678 是多少？")) {
 使用 async iterator 是有意的：CLI、Web UI、日志系统和调试器都可以消费相同事件，
 而核心循环不依赖任何界面。
 
+## 直接使用 pi-agent
+
+项目同时保留一个不经过教学循环、直接调用 `@earendil-works/pi-agent-core` 的版本：
+
+```bash
+# 只检查模型与工具装配，不请求网络
+npm run pi-check
+
+# 真实调用国内 MiniMax
+npm run pi-example -- "精确计算 1234 × 5678"
+```
+
+pi-ai 的 `minimax-cn` provider 默认读取 `MINIMAX_CN_API_KEY`。为了和本项目其余入口一致，
+示例也接受 `MINIMAX_API_KEY` 并在进程内完成映射。
+
 ## 使用本机 Codex
 
 本机已登录相应 CLI 时：
@@ -125,13 +166,28 @@ src/
 │   ├── types.ts          # 消息、工具、模型、事件协议
 │   ├── agent-loop.ts     # 唯一的控制循环
 │   └── agent.ts          # 有状态 Agent
+├── runtime/
+│   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
 │   ├── minimax.ts        # Anthropic-compatible API
 │   └── codex-cli.ts      # Codex CLI（实验性）
 ├── tools/
 │   ├── calculator.ts
 │   └── current-time.ts
+├── web/
+│   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
+
+web/
+├── index.html            # 零框架页面
+├── styles.css
+└── app.js
+
+python/from_scratch_agent/ # Python 教学实现
+notebooks/                # 可逐格调试的教程
+examples/pi-agent-direct.ts
+docs/                     # MkDocs 使用说明
+mkdocs.yml
 ```
 
 ## 设计原则
@@ -162,9 +218,20 @@ src/
 
 ```bash
 npm run check
+npm run pi-check
+PYTHONPATH=python .venv/bin/python -m unittest discover -s python/tests -v
+.venv/bin/jupyter nbconvert --execute --to notebook --inplace notebooks/agent_from_scratch.ipynb
+.venv/bin/mkdocs build --strict
 ```
 
-测试不访问真实模型 API，使用脚本化假模型验证直答、工具循环和错误恢复。
+测试不访问真实模型 API，使用脚本化假模型验证直答、工具循环、错误恢复和
+Web NDJSON 事件流。
+
+本地预览文档站：
+
+```bash
+.venv/bin/mkdocs serve
+```
 
 ## 当前边界
 

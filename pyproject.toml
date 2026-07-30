@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-from-scratch"
+version = "0.1.0"
+description = "适合初学者阅读的最小 Python Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+agent-from-scratch = "from_scratch_agent.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/from_scratch_agent"]

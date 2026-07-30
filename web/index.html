@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="与 Agent 对话，并实时观察 model、tool 和 result 如何组成 Agent loop。"
+    />
+    <title>Agent Observatory</title>
+    <link rel="stylesheet" href="/styles.css?v=scroll-status-fix" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Agent Observatory 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span>
+          </span>
+          <span>
+            <strong>Agent Observatory</strong>
+            <small>from scratch / live loop</small>
+          </span>
+        </a>
+
+        <div class="topbar-actions">
+          <div class="provider-badge" title="当前模型后端">
+            <span class="provider-light" aria-hidden="true"></span>
+            <span id="provider-name">connecting</span>
+          </div>
+          <button class="quiet-button" id="reset-button" type="button">
+            清空会话
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="conversation-panel" aria-label="对话">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Conversation</span>
+              <h1>给 Agent 一个任务</h1>
+            </div>
+            <div class="run-state" id="run-state" data-state="ready">
+              <span class="state-dot" aria-hidden="true"></span>
+              <span id="state-label">等待输入</span>
+            </div>
+          </div>
+
+          <div
+            class="messages"
+            id="messages"
+            role="log"
+            aria-live="polite"
+            aria-label="对话记录"
+          >
+            <div class="empty-state" id="empty-state">
+              <div class="empty-graphic" aria-hidden="true">
+                <span class="graphic-model">M</span>
+                <span class="graphic-tool">T</span>
+                <span class="graphic-result">R</span>
+              </div>
+              <div>
+                <p class="empty-kicker">CHAT ON THE LEFT · LOOP ON THE RIGHT</p>
+                <h2>答案不是突然出现的。</h2>
+                <p>
+                  发出一条消息。右侧会逐步展示模型如何判断、调用工具，并把结果放回上下文。
+                </p>
+              </div>
+              <div class="prompt-suggestions" aria-label="示例问题">
+                <button type="button" data-prompt="精确计算 1234 × 5678">
+                  计算 1234 × 5678
+                </button>
+                <button
+                  type="button"
+                  data-prompt="现在上海是几点？请使用工具确认"
+                >
+                  上海现在几点？
+                </button>
+                <button
+                  type="button"
+                  data-prompt="先算 48 × 19，再用一句话解释结果"
+                >
+                  做一个两步任务
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <form class="composer" id="composer">
+            <div class="activity-bar" id="activity-bar" data-state="ready">
+              <span class="activity-symbol" aria-hidden="true">
+                <i></i>
+              </span>
+              <div class="activity-copy">
+                <strong id="activity-title">准备就绪</strong>
+                <span id="activity-detail">发送任务后，这里会持续显示当前阶段</span>
+              </div>
+              <time id="activity-elapsed" datetime="PT0S">00:00</time>
+              <button id="stop-button" class="stop-button" type="button" hidden>
+                停止
+              </button>
+            </div>
+            <label class="sr-only" for="message-input">给 Agent 的消息</label>
+            <textarea
+              id="message-input"
+              rows="1"
+              maxlength="8000"
+              placeholder="描述任务，或问一个需要工具的问题…"
+              autocomplete="off"
+            ></textarea>
+            <div class="composer-footer">
+              <span>Enter 发送 · Shift + Enter 换行</span>
+              <button class="send-button" id="send-button" type="submit">
+                <span>运行</span>
+                <svg viewBox="0 0 18 18" aria-hidden="true">
+                  <path d="M4 9h9M9.5 4.5 14 9l-4.5 4.5" />
+                </svg>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="trace-panel" aria-label="Agent 执行轨迹">
+          <div class="trace-heading">
+            <div>
+              <span class="eyebrow">Execution trace</span>
+              <h2>Loop 运行轨迹</h2>
+            </div>
+            <span class="event-count" id="event-count">0 events</span>
+          </div>
+
+          <div class="loop-legend" aria-label="轨迹图例">
+            <span><i class="legend-model"></i>模型</span>
+            <span><i class="legend-tool"></i>工具</span>
+            <span><i class="legend-result"></i>结果</span>
+          </div>
+
+          <div class="trace-scroll" id="trace-scroll">
+            <div class="trace-empty" id="trace-empty">
+              <div class="idle-loop" aria-hidden="true">
+                <span class="idle-node node-one"></span>
+                <span class="idle-node node-two"></span>
+                <span class="idle-node node-three"></span>
+                <span class="idle-arrow">↻</span>
+              </div>
+              <p>事件会按真实发生顺序出现在这里。</p>
+              <code>model → tool → result → model</code>
+            </div>
+            <div class="trace-list" id="trace-list"></div>
+          </div>
+
+          <footer class="trace-footer">
+            <span>Context</span>
+            <div class="context-meter" aria-label="当前会话已启用">
+              <i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <span>in memory</span>
+          </footer>
+        </aside>
+      </main>
+    </div>
+
+    <template id="message-template">
+      <article class="message">
+        <div class="message-meta"></div>
+        <div class="message-body"></div>
+      </article>
+    </template>
+
+    <template id="trace-template">
+      <article class="trace-event">
+        <div class="trace-node" aria-hidden="true"></div>
+        <div class="trace-card">
+          <div class="trace-card-head">
+            <span class="trace-kind"></span>
+            <span class="trace-time"></span>
+          </div>
+          <strong class="trace-title"></strong>
+          <pre class="trace-detail"></pre>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js?v=scroll-status-fix" defer></script>
+  </body>
+</html>

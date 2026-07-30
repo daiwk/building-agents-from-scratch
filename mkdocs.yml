@@ -1,0 +1,81 @@
+site_name: Building Agents from Scratch
+site_description: 从一个最小反馈环开始，逐步看懂并实现 Agent
+site_url: https://daiwk.github.io/building-agents-from-scratch/
+repo_url: https://github.com/daiwk/building-agents-from-scratch
+repo_name: daiwk/building-agents-from-scratch
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: 切换到深色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: 切换到浅色模式
+
+nav:
+  - 首页: index.md
+  - 5 分钟上手: getting-started.md
+  - 核心原理:
+      - Agent Loop: concepts/agent-loop.md
+      - 架构说明: architecture.md
+  - 三种实现:
+      - 如何选择: implementations/index.md
+      - Python 版: implementations/python.md
+      - TypeScript 版: implementations/typescript.md
+      - pi-agent 版: implementations/pi-agent.md
+  - 动手调试:
+      - Notebook: notebook.md
+      - Web UI: web-ui.md
+  - 继续扩展: roadmap.md
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+strict: true

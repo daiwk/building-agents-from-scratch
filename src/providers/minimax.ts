@@ -40,7 +40,10 @@ type ApiResponse = {
 };
 
 /**
- * MiniMax Token Plan adapter using the official Anthropic-compatible endpoint.
+ * 把我们自己的 ModelRequest 翻译成 MiniMax Anthropic-compatible HTTP 请求。
+ *
+ * Provider 是“协议适配器”，不应该包含 Agent loop。换模型服务只需要换这个类，
+ * core/agent-loop.ts 完全不用改。
  */
 export class MiniMaxProvider implements ModelProvider {
   readonly name = "minimax";
@@ -63,6 +66,7 @@ export class MiniMaxProvider implements ModelProvider {
   }
 
   async generate(request: ModelRequest): Promise<AssistantMessage> {
+    // Node 20+ 自带 fetch；测试会注入 fake fetch，因此不会访问真实 API。
     const response = await this.request(`${this.baseUrl}/messages`, {
       method: "POST",
       headers: {
@@ -82,6 +86,7 @@ export class MiniMaxProvider implements ModelProvider {
       ...(request.signal ? { signal: request.signal } : {}),
     });
 
+    // `as ApiResponse` 只帮助 TypeScript 检查代码，不会修改服务器返回的数据。
     const body = (await response.json()) as ApiResponse;
     if (!response.ok || body.error || body.base_resp?.status_code) {
       const message =
@@ -127,6 +132,7 @@ function toApiTool(tool: Tool): object {
 }
 
 function toApiMessages(messages: readonly AgentMessage[]): object[] {
+  // 我们内部使用 role="tool"，Anthropic 协议将 tool_result 放在 user 消息中。
   return messages.map((message) => {
     if (message.role === "user") {
       return { role: "user", content: message.content };
@@ -146,8 +152,7 @@ function toApiMessages(messages: readonly AgentMessage[]): object[] {
     }
     return {
       role: "assistant",
-      // Thinking signatures are provider-specific, so history keeps only the
-      // portable text and tool-call blocks.
+      // thinking signature 与 provider 绑定；历史中只发送可移植的文本和工具调用。
       content: toApiAssistantBlocks(message.content),
     };
   });

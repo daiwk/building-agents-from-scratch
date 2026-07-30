@@ -6,10 +6,17 @@
   "description": "A tiny, readable agent architecture inspired by pi-agent.",
   "scripts": {
     "dev": "tsx src/cli.ts",
+    "web": "tsx src/web/server.ts",
     "example": "tsx examples/quick-start.ts",
+    "pi-example": "tsx examples/pi-agent-direct.ts",
+    "pi-check": "tsx examples/pi-agent-direct.ts --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.83.0",
+    "@earendil-works/pi-ai": "^0.83.0"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
@@ -18,6 +25,6 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19"
   }
 }
