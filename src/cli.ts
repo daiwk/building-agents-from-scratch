@@ -3,7 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { existsSync } from "node:fs";
 import { Agent, type ModelProvider } from "./core/index.js";
-import { LocalCliProvider, MiniMaxProvider } from "./providers/index.js";
+import { CodexCliProvider, MiniMaxProvider } from "./providers/index.js";
 import { calculatorTool, currentTimeTool } from "./tools/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
@@ -67,9 +67,8 @@ function createProvider(name: string): ModelProvider {
         "https://api.minimax.io/anthropic/v1",
     });
   }
-  if (name === "codex" || name === "trae") {
-    return new LocalCliProvider({
-      kind: name,
+  if (name === "codex") {
+    return new CodexCliProvider({
       cwd: process.cwd(),
       ...(process.env.AGENT_MODEL ? { model: process.env.AGENT_MODEL } : {}),
     });

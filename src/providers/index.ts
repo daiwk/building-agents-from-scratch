@@ -1,2 +1,2 @@
-export * from "./local-cli.js";
+export * from "./codex-cli.js";
 export * from "./minimax.js";

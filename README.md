@@ -96,18 +96,17 @@ for await (const event of agent.run("1234 * 5678 是多少？")) {
 使用 async iterator 是有意的：CLI、Web UI、日志系统和调试器都可以消费相同事件，
 而核心循环不依赖任何界面。
 
-## 使用本机 Codex 或 Trae
+## 使用本机 Codex
 
 本机已登录相应 CLI 时：
 
 ```bash
 AGENT_PROVIDER=codex npm run dev
-AGENT_PROVIDER=trae npm run dev
 ```
 
-这两个后端是实验性的。Codex CLI 和 Trae CLI 本身已经是 Agent，而不是裸模型 API；
-适配器会以只读 sandbox 启动它们并取得最终文本，因此不会再把本项目的工具传进去。
-若要让它们成为真正的底层模型后端，下一步应接它们的 app-server/ACP 协议，而不是套娃式
+这个后端是实验性的。Codex CLI 本身已经是 Agent，而不是裸模型 API；
+适配器会以只读 sandbox 启动它并取得最终文本，因此不会再把本项目的工具传进去。
+若要让它成为真正的底层模型后端，下一步应接它的 app-server 协议，而不是套娃式
 CLI 调用。
 
 ## 目录
@@ -120,7 +119,7 @@ src/
 │   └── agent.ts          # 有状态 Agent
 ├── providers/
 │   ├── minimax.ts        # Anthropic-compatible API
-│   └── local-cli.ts      # Codex / Trae（实验性）
+│   └── codex-cli.ts      # Codex CLI（实验性）
 ├── tools/
 │   ├── calculator.ts
 │   └── current-time.ts

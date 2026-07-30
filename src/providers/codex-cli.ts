@@ -6,8 +6,7 @@ import type {
   ModelRequest,
 } from "../core/index.js";
 
-export type LocalCliProviderOptions = {
-  kind: "codex" | "trae";
+export type CodexCliProviderOptions = {
   executable?: string;
   cwd?: string;
   model?: string;
@@ -15,19 +14,18 @@ export type LocalCliProviderOptions = {
 };
 
 /**
- * Experimental adapter for local coding-agent CLIs.
+ * Experimental adapter for the local Codex CLI.
  *
- * Codex and Trae are already agents rather than raw LLM APIs. This adapter
- * therefore supports conversation only; use MiniMax when demonstrating this
- * project's own tool loop.
+ * Codex is already an agent rather than a raw LLM API. This adapter therefore
+ * supports conversation only; use MiniMax when demonstrating this project's
+ * own tool loop.
  */
-export class LocalCliProvider implements ModelProvider {
-  readonly name: string;
-  private readonly options: LocalCliProviderOptions;
+export class CodexCliProvider implements ModelProvider {
+  readonly name = "codex-cli";
+  private readonly options: CodexCliProviderOptions;
 
-  constructor(options: LocalCliProviderOptions) {
+  constructor(options: CodexCliProviderOptions = {}) {
     this.options = options;
-    this.name = `${options.kind}-cli`;
   }
 
   async generate(request: ModelRequest): Promise<AssistantMessage> {
@@ -39,9 +37,7 @@ export class LocalCliProvider implements ModelProvider {
     }
 
     const prompt = renderPrompt(request.systemPrompt, request.messages);
-    const executable =
-      this.options.executable ??
-      (this.options.kind === "codex" ? "codex" : "trae-cli");
+    const executable = this.options.executable ?? "codex";
     const args = [
       "exec",
       "--ephemeral",
