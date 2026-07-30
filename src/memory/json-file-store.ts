@@ -9,12 +9,11 @@ import { randomUUID } from "node:crypto";
 import {
   validateSessionId,
   type AgentMessage,
-  type ConversationStore,
 } from "../core/index.js";
 
-type MemoryFile = {
+type MemoryFile<TMessage> = {
   version: 1;
-  conversations: Record<string, AgentMessage[]>;
+  conversations: Record<string, TMessage[]>;
 };
 
 /**
@@ -26,7 +25,7 @@ type MemoryFile = {
  *
  * 多进程或生产服务应换成 SQLite/PostgreSQL，而不是共享这个 JSON 文件。
  */
-export class JsonFileConversationStore implements ConversationStore {
+export class JsonFileConversationStore<TMessage = AgentMessage> {
   readonly filePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
 
@@ -35,7 +34,7 @@ export class JsonFileConversationStore implements ConversationStore {
     this.filePath = resolve(filePath);
   }
 
-  async load(sessionId: string): Promise<AgentMessage[]> {
+  async load(sessionId: string): Promise<TMessage[]> {
     validateSessionId(sessionId);
     await this.writeQueue.catch(() => undefined);
     const data = await this.readData();
@@ -44,7 +43,7 @@ export class JsonFileConversationStore implements ConversationStore {
 
   save(
     sessionId: string,
-    messages: readonly AgentMessage[],
+    messages: readonly TMessage[],
   ): Promise<void> {
     validateSessionId(sessionId);
     const snapshot = structuredClone([...messages]);
@@ -71,11 +70,11 @@ export class JsonFileConversationStore implements ConversationStore {
     return task;
   }
 
-  private async readData(): Promise<MemoryFile> {
+  private async readData(): Promise<MemoryFile<TMessage>> {
     try {
       const parsed = JSON.parse(
         await readFile(this.filePath, "utf8"),
-      ) as Partial<MemoryFile>;
+      ) as Partial<MemoryFile<TMessage>>;
       if (
         parsed.version !== 1 ||
         typeof parsed.conversations !== "object" ||
@@ -88,7 +87,7 @@ export class JsonFileConversationStore implements ConversationStore {
           throw new Error("Memory conversation must be an array.");
         }
       }
-      return parsed as MemoryFile;
+      return parsed as MemoryFile<TMessage>;
     } catch (error) {
       if (isFileNotFound(error)) {
         return { version: 1, conversations: {} };
@@ -97,7 +96,7 @@ export class JsonFileConversationStore implements ConversationStore {
     }
   }
 
-  private async writeData(data: MemoryFile): Promise<void> {
+  private async writeData(data: MemoryFile<TMessage>): Promise<void> {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(temporaryPath, `${JSON.stringify(data, null, 2)}\n`, {

@@ -131,3 +131,13 @@ Loader 有意设置以下边界：
 - ConversationStore：SQLite、加密、TTL；
 - ContextBuilder：token budget、摘要、检索结果排序；
 - SkillCatalog：基于描述的动态选择、依赖检查和版本信息。
+
+## 三套实现的对应关系
+
+| 能力 | TypeScript from scratch | Python from scratch | pi-agent direct |
+|---|---|---|---|
+| 工具加载 | `ToolRegistry` | `ToolRegistry` | `PiToolRegistry` + `AgentTool` |
+| 参数校验 | 教学 JSON Schema 子集 | 同一 Schema 子集 | pi-agent/TypeBox 原生校验 |
+| 会话 memory | `JsonFileConversationStore` | `JsonFileConversationStore` | 通用 JSON store + pi messages |
+| Skill | `SkillCatalog` | Python `SkillCatalog` | 复用 TypeScript loader/catalog |
+| Timeout/retry | `ModelCallPolicy` | Python `ModelCallPolicy` | pi-ai 原生 stream options |

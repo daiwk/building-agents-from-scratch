@@ -3,9 +3,11 @@
 import json
 from typing import Any
 from urllib.error import HTTPError
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from .types import Message, Tool
+from .reliability import RetryableModelError
 
 
 class MiniMaxProvider:
@@ -19,6 +21,7 @@ class MiniMaxProvider:
         model: str = "MiniMax-M2.7",
         base_url: str = "https://api.minimaxi.com/anthropic/v1",
         max_tokens: int = 8192,
+        timeout_seconds: float = 120,
     ) -> None:
         if not api_key:
             raise ValueError("需要 MINIMAX_API_KEY")
@@ -26,6 +29,7 @@ class MiniMaxProvider:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.max_tokens = max_tokens
+        self.timeout_seconds = timeout_seconds
 
     def generate(
         self,
@@ -61,11 +65,19 @@ class MiniMaxProvider:
         )
 
         try:
-            with urlopen(request, timeout=120) as response:  # noqa: S310
+            with urlopen(  # noqa: S310
+                request,
+                timeout=self.timeout_seconds,
+            ) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             details = error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"MiniMax 请求失败：{error.code} {details}") from error
+            message = f"MiniMax 请求失败：{error.code} {details}"
+            if error.code in {408, 409, 429} or error.code >= 500:
+                raise RetryableModelError(message) from error
+            raise RuntimeError(message) from error
+        except URLError as error:
+            raise RetryableModelError(f"MiniMax 网络请求失败：{error}") from error
 
         blocks = [_to_core_block(block) for block in body.get("content", [])]
         if not blocks:

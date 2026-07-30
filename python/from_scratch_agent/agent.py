@@ -7,13 +7,17 @@
 from collections.abc import Iterator
 from typing import Any
 
+from .memory import ConversationStore
+from .reliability import ModelCallPolicy, call_with_policy
 from .types import AgentContext, Event, Message, ModelProvider, Tool
+from .validation import validate_tool_input
 
 
 def agent_loop(
     context: AgentContext,
     model: ModelProvider,
     max_turns: int = 8,
+    model_policy: ModelCallPolicy | None = None,
 ) -> Iterator[Event]:
     """运行 Agent，并逐个产生可观察事件。
 
@@ -28,10 +32,14 @@ def agent_loop(
         yield {"type": "turn_start", "turn": turn}
 
         # 模型只看见结构化的上下文，不会直接执行 Python 函数。
-        assistant = model.generate(
-            context.system_prompt,
-            context.messages,
-            context.tools,
+        policy = model_policy or ModelCallPolicy()
+        assistant = call_with_policy(
+            lambda: model.generate(
+                context.system_prompt,
+                context.messages,
+                context.tools,
+            ),
+            policy,
         )
         context.messages.append(assistant)
 
@@ -77,6 +85,13 @@ def _execute_tool(call: Message, tools: list[Tool]) -> Message:
         arguments = call.get("arguments", {})
         if not isinstance(arguments, dict):
             raise TypeError("工具参数必须是字典")
+        validation_errors = validate_tool_input(tool.input_schema, arguments)
+        if validation_errors:
+            return _tool_result(
+                call,
+                "工具参数无效：" + "; ".join(validation_errors),
+                is_error=True,
+            )
         return _tool_result(call, tool.execute(arguments), is_error=False)
     except Exception as error:  # 工具失败时让模型有机会根据错误自行修正。
         return _tool_result(call, str(error), is_error=True)
@@ -101,9 +116,16 @@ class Agent:
         system_prompt: str = "你是一个有帮助的助手。",
         tools: list[Tool] | None = None,
         max_turns: int = 8,
+        model_policy: ModelCallPolicy | None = None,
+        memory_store: ConversationStore | None = None,
+        session_id: str = "default",
     ) -> None:
         self.model = model
         self.max_turns = max_turns
+        self.model_policy = model_policy or ModelCallPolicy()
+        self.memory_store = memory_store
+        self.session_id = session_id
+        self._memory_loaded = False
         self.context = AgentContext(
             system_prompt=system_prompt,
             tools=list(tools or []),
@@ -112,10 +134,32 @@ class Agent:
     def run(self, user_input: str) -> Iterator[Event]:
         """追加用户消息，然后把底层 loop 的事件原样转发出去。"""
 
+        self._load_memory_once()
         self.context.messages.append({"role": "user", "content": user_input})
-        yield from agent_loop(self.context, self.model, self.max_turns)
+        try:
+            yield from agent_loop(
+                self.context,
+                self.model,
+                self.max_turns,
+                self.model_policy,
+            )
+        finally:
+            if self.memory_store:
+                self.memory_store.save(
+                    self.session_id,
+                    self.context.messages,
+                )
 
     def reset(self) -> None:
         """清空短期记忆。"""
 
         self.context.messages.clear()
+        self._memory_loaded = True
+        if self.memory_store:
+            self.memory_store.clear(self.session_id)
+
+    def _load_memory_once(self) -> None:
+        if not self.memory_store or self._memory_loaded:
+            return
+        self.context.messages.extend(self.memory_store.load(self.session_id))
+        self._memory_loaded = True

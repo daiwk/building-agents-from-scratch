@@ -198,6 +198,10 @@ docs/                     # MkDocs 使用说明
 mkdocs.yml
 ```
 
+Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.md 和模型调用可靠性
+配置。三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
+覆盖。详见文档站的“三种实现”章节。
+
 ## 设计原则
 
 - 状态显式：全部对话都在 `AgentContext.messages`，没有隐藏全局状态。

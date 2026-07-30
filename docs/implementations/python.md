@@ -1,7 +1,7 @@
 # Python 版
 
-Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行时库。它刻意保持同步，
-让第一次学习时只关注控制流。
+Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行时库。它保持同步 API，
+但现在与 TypeScript 版共享 Tools、Memory、Skills 和可靠性策略的设计语义。
 
 ## 阅读顺序
 
@@ -9,7 +9,12 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 2. `agent.py`：完整循环；
 3. `tools.py`：计算器和时间工具；
 4. `minimax.py`：国内 MiniMax 协议适配；
-5. `cli.py`：终端交互外壳。
+5. `registry.py`：按名称加载工具；
+6. `memory.py`：内存与 JSON ConversationStore；
+7. `skills.py`：读取、选择和注入 SKILL.md；
+8. `reliability.py`：timeout、retry 和指数退避；
+9. `runtime.py`：统一读取环境变量；
+10. `cli.py`：终端交互外壳。
 
 ## 运行
 
@@ -22,6 +27,29 @@ PYTHONPATH=python .venv/bin/python -m from_scratch_agent.cli
 ```bash
 PYTHONPATH=python .venv/bin/python -m unittest discover -s python/tests -v
 ```
+
+## 核心组件配置
+
+Python CLI 与 TypeScript CLI 使用相同环境变量：
+
+```dotenv
+AGENT_TOOLS=calculator,current_time
+AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_SESSION_ID=python-cli
+AGENT_SKILLS_DIR=skills
+AGENT_SKILLS=tool-first
+AGENT_MODEL_TIMEOUT_MS=120000
+AGENT_MODEL_MAX_RETRIES=1
+AGENT_RETRY_DELAY_MS=500
+AGENT_MAX_RETRY_DELAY_MS=8000
+```
+
+不设置 `AGENT_MEMORY_FILE` 时仍是纯内存对话；不设置 `AGENT_SKILLS` 时不会加载任何
+skill。工具参数会在执行前通过与 TypeScript 版相同的 JSON Schema 子集校验。
+
+Python 无法安全地强制终止任意同步函数，因此教学版 timeout 使用 daemon worker 停止
+外层等待，同时 MiniMax provider 自身也设置 socket timeout。生产级异步服务建议改用
+asyncio/httpx，而不是无限增加后台线程。
 
 ## 为什么用 `yield`
 

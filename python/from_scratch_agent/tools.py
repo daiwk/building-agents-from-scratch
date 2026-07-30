@@ -41,6 +41,7 @@ calculator_tool = Tool(
             "right": {"type": "number"},
         },
         "required": ["operation", "left", "right"],
+        "additionalProperties": False,
     },
     execute=_calculate,
 )
@@ -63,6 +64,7 @@ current_time_tool = Tool(
         "type": "object",
         "properties": {"time_zone": {"type": "string"}},
         "required": ["time_zone"],
+        "additionalProperties": False,
     },
     execute=_current_time,
 )
