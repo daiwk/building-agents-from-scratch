@@ -10,6 +10,7 @@ import type {
   ModelProvider,
   Tool,
 } from "./types.js";
+import type { ModelCallPolicy } from "./model-call.js";
 
 export type AgentOptions = {
   model: ModelProvider;
@@ -17,6 +18,7 @@ export type AgentOptions = {
   tools?: Tool[];
   maxTurns?: number;
   hooks?: AgentHooks;
+  modelCall?: ModelCallPolicy;
 };
 
 /**
@@ -30,12 +32,14 @@ export class Agent {
   private readonly model: ModelProvider;
   private readonly maxTurns: number;
   private readonly hooks: AgentHooks | undefined;
+  private readonly modelCall: ModelCallPolicy | undefined;
 
   constructor(options: AgentOptions) {
     // `??` 是空值合并：左边为 undefined 时才使用右边的默认值。
     this.model = options.model;
     this.maxTurns = options.maxTurns ?? 8;
     this.hooks = options.hooks;
+    this.modelCall = options.modelCall;
     this.context = {
       systemPrompt: options.systemPrompt ?? "You are a helpful assistant.",
       messages: [],
@@ -50,10 +54,12 @@ export class Agent {
     // 每次 run() 先把用户消息追加到同一份历史中，因此 Agent 记得之前的对话。
     this.context.messages.push({ role: "user", content: input });
     const hooks = options.hooks ?? this.hooks;
+    const modelCall = options.modelCall ?? this.modelCall;
     // yield* 把内部生成器产生的事件原样转发给外部调用者。
     return yield* agentLoop(this.context, this.model, {
       maxTurns: options.maxTurns ?? this.maxTurns,
       ...(hooks ? { hooks } : {}),
+      ...(modelCall ? { modelCall } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
   }

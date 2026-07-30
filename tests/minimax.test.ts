@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { RetryableModelError } from "../src/core/index.js";
 import { MiniMaxProvider } from "../src/providers/index.js";
 
 describe("MiniMaxProvider", () => {
@@ -44,5 +45,41 @@ describe("MiniMaxProvider", () => {
         headers: expect.objectContaining({ "x-api-key": "test-key" }),
       }),
     );
+  });
+
+  it("marks rate limits as retryable", async () => {
+    const provider = new MiniMaxProvider({
+      apiKey: "test-key",
+      fetch: async () =>
+        new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+          status: 429,
+        }),
+    });
+
+    await expect(
+      provider.generate({
+        systemPrompt: "test",
+        messages: [],
+        tools: [],
+      }),
+    ).rejects.toBeInstanceOf(RetryableModelError);
+  });
+
+  it("does not mark authentication failures as retryable", async () => {
+    const provider = new MiniMaxProvider({
+      apiKey: "bad-key",
+      fetch: async () =>
+        new Response(JSON.stringify({ error: { message: "unauthorized" } }), {
+          status: 401,
+        }),
+    });
+
+    await expect(
+      provider.generate({
+        systemPrompt: "test",
+        messages: [],
+        tools: [],
+      }),
+    ).rejects.not.toBeInstanceOf(RetryableModelError);
   });
 });

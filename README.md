@@ -197,6 +197,8 @@ mkdocs.yml
 - 状态显式：全部对话都在 `AgentContext.messages`，没有隐藏全局状态。
 - 协议小而稳定：模型只需实现 `ModelProvider.generate()`，工具只需实现 `Tool.execute()`。
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
+- 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
+- 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
 - 高级能力外置：memory、skills、观测和策略通过 hooks 或 context 变换实现。
 - 默认安全：本机 CLI 后端使用只读 sandbox；示例工具不执行 shell、不写文件。

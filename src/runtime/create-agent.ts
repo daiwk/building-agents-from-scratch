@@ -18,6 +18,11 @@ export function createAgentFromEnv(): Agent {
       providerName === "minimax" ? [calculatorTool, currentTimeTool] : [],
     systemPrompt:
       "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。",
+    modelCall: {
+      timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
+      maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),
+      retryDelayMs: readNonNegativeNumber("AGENT_RETRY_DELAY_MS", 500),
+    },
   });
 }
 
@@ -44,4 +49,22 @@ function createProvider(name: string): ModelProvider {
     });
   }
   throw new Error(`Unknown AGENT_PROVIDER: ${name}`);
+}
+
+function readNonNegativeNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number.`);
+  }
+  return value;
+}
+
+function readNonNegativeInteger(name: string, fallback: number): number {
+  const value = readNonNegativeNumber(name, fallback);
+  if (!Number.isInteger(value)) {
+    throw new Error(`${name} must be an integer.`);
+  }
+  return value;
 }
