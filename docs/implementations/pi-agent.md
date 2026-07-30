@@ -1,7 +1,8 @@
 # 直接使用 pi-agent
 
-`examples/pi-agent-direct.ts` 用成熟的 pi-agent API 实现同一个计算 Agent。它不是包装
-本项目的 from-scratch 循环，而是直接创建 `Agent`、模型和 `AgentTool`。
+`examples/pi-agent-direct.ts` 用成熟的 pi-agent API 实现同一个 Agent。它不是包装
+本项目的 from-scratch 循环，而是直接创建 `Agent`、模型和 `AgentTool`，并复用项目的
+SKILL.md loader 与通用 JSON session store。
 
 ## 离线检查
 
@@ -20,6 +21,40 @@ npm run pi-example -- "精确计算 1234 × 5678"
 示例使用 `@earendil-works/pi-ai/providers/minimax-cn`。如果只设置了本项目统一使用的
 `MINIMAX_API_KEY`，示例会在进程内映射为 pi-ai 读取的 `MINIMAX_CN_API_KEY`。
 
+## Tools、Memory 与 Skills
+
+默认复用 `AGENT_*`：
+
+```dotenv
+AGENT_TOOLS=calculator,current_time
+AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_SESSION_ID=pi-cli
+AGENT_SKILLS_DIR=skills
+AGENT_SKILLS=tool-first
+```
+
+需要与 from-scratch Agent 隔离时，可以使用 `PI_AGENT_TOOLS`、
+`PI_AGENT_MEMORY_FILE`、`PI_AGENT_SESSION_ID`、`PI_AGENT_SKILLS_DIR` 和
+`PI_AGENT_SKILLS` 覆盖。
+
+- 工具通过 pi-agent 自己的 `AgentTool` 与 TypeBox Schema 校验；
+- 历史消息从 `initialState.messages` 恢复；
+- `agent_end` listener 被 pi-agent await，memory 保存完成后 `prompt()` 才结束；
+- skill 仍然只注入指令，不自动获得工具或代码执行权限。
+
+## Timeout 与 Retry
+
+示例的 `streamFn` 把下面配置直接传给 pi-ai：
+
+```dotenv
+AGENT_MODEL_TIMEOUT_MS=120000
+AGENT_MODEL_MAX_RETRIES=1
+AGENT_MAX_RETRY_DELAY_MS=8000
+```
+
+这使用成熟库原生的 provider timeout/retry，而不是在 pi-agent 外再复制一遍
+from-scratch 重试循环。
+
 ## 与教学版对照
 
 | 教学版 | pi-agent |
@@ -28,6 +63,8 @@ npm run pi-example -- "精确计算 1234 × 5678"
 | 工具参数是普通 JSON Schema | `Type.Object` 同时提供 Schema 与类型 |
 | 自定义少量事件 | 标准 message/tool/agent 生命周期事件 |
 | 一个 MiniMax provider | pi-ai 的 provider 与 model registry |
+| 自己实现 Schema 子集 | TypeBox + pi-agent 原生校验 |
+| 自己实现模型重试循环 | pi-ai provider 原生 timeout/retry |
 
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改
 协议以及验证自己的架构想法。

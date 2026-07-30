@@ -11,10 +11,17 @@ import { loadEnvFile } from "node:process";
 import { pathToFileURL } from "node:url";
 import {
   Agent as PiAgent,
+  type AgentMessage as PiAgentMessage,
   type AgentTool,
 } from "@earendil-works/pi-agent-core";
 import { createModels, Type } from "@earendil-works/pi-ai";
 import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
+import { JsonFileConversationStore } from "../src/memory/index.js";
+import {
+  SkillCatalog,
+  applySkillsToSystemPrompt,
+  loadSkillsFromDirectory,
+} from "../src/skills/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -56,7 +63,60 @@ const calculatorTool: AgentTool<
   },
 };
 
-export function createPiAgent(): PiAgent {
+const currentTimeParameters = Type.Object({
+  timeZone: Type.String({
+    description: "IANA time zone，例如 Asia/Shanghai",
+  }),
+});
+
+const currentTimeTool: AgentTool<
+  typeof currentTimeParameters,
+  { timeZone: string }
+> = {
+  name: "current_time",
+  label: "Current time",
+  description: "获取指定 IANA 时区的当前时间。",
+  parameters: currentTimeParameters,
+  executionMode: "sequential",
+  async execute(_toolCallId, params) {
+    const text = new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "full",
+      timeStyle: "long",
+      timeZone: params.timeZone,
+    }).format(new Date());
+    return {
+      content: [{ type: "text", text }],
+      details: { timeZone: params.timeZone },
+    };
+  },
+};
+
+type AnyPiTool = AgentTool<any, any>;
+
+class PiToolRegistry {
+  private readonly tools = new Map<string, AnyPiTool>();
+
+  register(tool: AnyPiTool): this {
+    if (this.tools.has(tool.name)) {
+      throw new Error(`pi-agent tool 已注册：${tool.name}`);
+    }
+    this.tools.set(tool.name, tool);
+    return this;
+  }
+
+  select(names: readonly string[]): AnyPiTool[] {
+    return names.map((name) => {
+      const tool = this.tools.get(name);
+      if (!tool) throw new Error(`未知 pi-agent tool：${name}`);
+      return tool;
+    });
+  }
+}
+
+/**
+ * 直接使用 pi-agent，但复用项目的 memory/skill 文件格式与环境变量语义。
+ */
+export async function createPiAgent(): Promise<PiAgent> {
   // pi-ai 已内置 MiniMax 国内 provider：
   // baseUrl=https://api.minimaxi.com/anthropic
   // 默认读取 MINIMAX_CN_API_KEY。
@@ -74,14 +134,61 @@ export function createPiAgent(): PiAgent {
     );
   }
 
+  const toolRegistry = new PiToolRegistry()
+    .register(calculatorTool)
+    .register(currentTimeTool);
+  const selectedTools = toolRegistry.select(
+    readList("PI_AGENT_TOOLS", readList("AGENT_TOOLS", [
+      "calculator",
+      "current_time",
+    ])),
+  );
+  const selectedSkills = loadSelectedPiSkills();
+  const sessionId =
+    process.env.PI_AGENT_SESSION_ID ??
+    process.env.AGENT_SESSION_ID ??
+    "pi-cli";
+  const memoryFile =
+    process.env.PI_AGENT_MEMORY_FILE ?? process.env.AGENT_MEMORY_FILE;
+  const memoryStore = memoryFile
+    ? new JsonFileConversationStore<PiAgentMessage>(memoryFile)
+    : undefined;
+  const savedMessages = memoryStore
+    ? await memoryStore.load(sessionId)
+    : [];
+  const timeoutMs = readNonNegativeNumber(
+    "AGENT_MODEL_TIMEOUT_MS",
+    120_000,
+  );
+  const maxRetries = readNonNegativeInteger(
+    "AGENT_MODEL_MAX_RETRIES",
+    1,
+  );
+  const maxRetryDelayMs = readNonNegativeNumber(
+    "AGENT_MAX_RETRY_DELAY_MS",
+    8_000,
+  );
+
   const agent = new PiAgent({
     initialState: {
-      systemPrompt: "你是一个可靠的助手；精确计算必须使用 calculator。",
+      systemPrompt: applySkillsToSystemPrompt(
+        "你是一个可靠的助手；精确计算和当前时间必须使用工具。",
+        selectedSkills,
+      ),
       model,
-      tools: [calculatorTool],
+      tools: selectedTools,
+      messages: savedMessages,
     },
-    // pi-agent 要求注入真正执行模型流的函数。
-    streamFn: models.streamSimple.bind(models),
+    // pi-ai 原生支持 timeout/maxRetries，不需要在成熟库外再写一套重试循环。
+    streamFn: (selectedModel, context, options) =>
+      models.streamSimple(selectedModel, context, {
+        ...options,
+        timeoutMs,
+        maxRetries,
+        maxRetryDelayMs,
+      }),
+    sessionId,
+    maxRetryDelayMs,
     toolExecution: "sequential",
   });
 
@@ -101,10 +208,53 @@ export function createPiAgent(): PiAgent {
     }
     if (event.type === "agent_end") {
       console.log("\n[done]");
+      // subscribe listener 会被 pi-agent await，保存完成后 prompt() 才结束。
+      if (memoryStore) {
+        return memoryStore.save(sessionId, agent.state.messages);
+      }
     }
   });
 
   return agent;
+}
+
+function loadSelectedPiSkills() {
+  const names = readList(
+    "PI_AGENT_SKILLS",
+    readList("AGENT_SKILLS", []),
+  );
+  if (names.length === 0) return [];
+  const directory =
+    process.env.PI_AGENT_SKILLS_DIR ??
+    process.env.AGENT_SKILLS_DIR ??
+    "skills";
+  return new SkillCatalog()
+    .registerMany(loadSkillsFromDirectory(directory))
+    .select(names);
+}
+
+function readList(name: string, fallback: string[]): string[] {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function readNonNegativeNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const value = raw === undefined || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number.`);
+  }
+  return value;
+}
+
+function readNonNegativeInteger(name: string, fallback: number): number {
+  const value = readNonNegativeNumber(name, fallback);
+  if (!Number.isInteger(value)) throw new Error(`${name} must be an integer.`);
+  return value;
 }
 
 const isMain =
@@ -112,7 +262,7 @@ const isMain =
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 
 if (isMain) {
-  const agent = createPiAgent();
+  const agent = await createPiAgent();
   if (process.argv.includes("--dry-run")) {
     console.log(
       `pi-agent ready · model=${agent.state.model.id} · tools=${agent.state.tools
