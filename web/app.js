@@ -246,14 +246,40 @@ function handleAgentEvent(event) {
     return;
   }
 
-  if (event.type === "text") {
+  if (event.type === "text" || event.type === "textDelta") {
+    const text = event.type === "textDelta" ? event.delta : event.text;
     if (!state.assistantMessage) {
-      state.assistantMessage = addMessage("assistant", event.text);
+      state.assistantMessage = addMessage("assistant", text);
     } else {
       const body = state.assistantMessage.querySelector(".message-body");
-      const fullText = `${body.dataset.rawText || body.textContent}${event.text}`;
+      const fullText = `${body.dataset.rawText || body.textContent}${text}`;
       renderMessageText(body, fullText);
     }
+    if (event.type === "textDelta") {
+      setActivity(
+        "running",
+        "模型正在流式回答",
+        "文本会边生成边显示；完整消息尚未写入 Context",
+      );
+    }
+    return;
+  }
+
+  if (event.type === "thinkingDelta") {
+    setActivity(
+      "running",
+      "模型正在推理",
+      "已收到 thinking delta；页面不展示模型内部思考内容",
+    );
+    return;
+  }
+
+  if (event.type === "toolArgumentsDelta") {
+    setActivity(
+      "running",
+      `正在生成工具参数 · ${event.toolName}`,
+      "参数仍是 JSON 片段，完成后才会校验并执行工具",
+    );
     return;
   }
 

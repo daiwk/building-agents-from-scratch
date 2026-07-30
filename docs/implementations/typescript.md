@@ -1,8 +1,12 @@
 # TypeScript 版
 
-TypeScript 版增加了异步工具、取消信号、生命周期 hooks、ContextBuilder、动态 Skill
-和 Sub-agent adapter，适合 Node.js 与 Web 应用。核心文件均包含中文注释，也会解释
-新人不熟悉的语法。
+TypeScript 版增加了模型 token streaming、异步工具、取消信号、生命周期 hooks、
+ContextBuilder、动态 Skill 和 Sub-agent adapter，适合 Node.js 与 Web 应用。核心文件
+均包含中文注释，也会解释新人不熟悉的语法。
+
+MiniMax provider 实现了 Anthropic-compatible SSE；其他 provider 只实现
+`generate()` 也仍然可用。streaming 产生 `textDelta`、`thinkingDelta` 和
+`toolArgumentsDelta`，完整消息结束后才进入 Agent history。
 
 ## 只先认识五个语法
 

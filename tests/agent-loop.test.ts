@@ -33,6 +33,42 @@ describe("Agent", () => {
     expect(agent.context.messages).toHaveLength(2);
   });
 
+  it("streams deltas before committing the complete assistant message", async () => {
+    const complete: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "Hello!" }],
+      stopReason: "stop",
+    };
+    const model: ModelProvider = {
+      name: "streamed",
+      async generate() {
+        return complete;
+      },
+      async *stream() {
+        yield { type: "textDelta", delta: "Hel" };
+        yield { type: "textDelta", delta: "lo!" };
+        return complete;
+      },
+    };
+    const agent = new Agent({ model });
+    const events = [];
+
+    for await (const event of agent.run("Hi")) {
+      events.push(event);
+      if (event.type === "textDelta") {
+        // 此时历史里只有 user message，半条 assistant 尚未写入。
+        expect(agent.context.messages).toHaveLength(1);
+      }
+    }
+
+    expect(events.filter((event) => event.type === "textDelta")).toEqual([
+      { type: "textDelta", delta: "Hel" },
+      { type: "textDelta", delta: "lo!" },
+    ]);
+    expect(events.some((event) => event.type === "text")).toBe(false);
+    expect(agent.context.messages[1]).toBe(complete);
+  });
+
   it("executes a tool and gives its result back to the model", async () => {
     const model = new ScriptedModel([
       {

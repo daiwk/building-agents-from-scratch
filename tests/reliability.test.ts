@@ -4,6 +4,7 @@ import {
   ModelTimeoutError,
   RetryableModelError,
   callModelWithPolicy,
+  streamModelWithPolicy,
   type AssistantMessage,
   type ModelProvider,
   type ModelRequest,
@@ -165,5 +166,79 @@ describe("model call policy", () => {
     controller.abort(new Error("user stopped"));
 
     await expect(pending).rejects.toThrow("user stopped");
+  });
+
+  it("retries a stream only before the first visible delta", async () => {
+    let calls = 0;
+    const model: ModelProvider = {
+      name: "stream-retry",
+      async generate() {
+        return finalMessage;
+      },
+      async *stream() {
+        calls += 1;
+        if (calls === 1) throw new RetryableModelError("before delta");
+        yield { type: "textDelta", delta: "ok" };
+        return finalMessage;
+      },
+    };
+    const stream = streamModelWithPolicy(model, emptyRequest, {
+      maxRetries: 1,
+      retryDelayMs: 0,
+    });
+
+    expect(await stream.next()).toEqual({
+      done: false,
+      value: { type: "textDelta", delta: "ok" },
+    });
+    expect(await stream.next()).toEqual({
+      done: true,
+      value: finalMessage,
+    });
+    expect(calls).toBe(2);
+  });
+
+  it("does not retry after a stream delta was emitted", async () => {
+    let calls = 0;
+    const model: ModelProvider = {
+      name: "stream-no-duplicate",
+      async generate() {
+        return finalMessage;
+      },
+      async *stream() {
+        calls += 1;
+        yield { type: "textDelta", delta: "visible" };
+        throw new RetryableModelError("after delta");
+      },
+    };
+    const stream = streamModelWithPolicy(model, emptyRequest, {
+      maxRetries: 2,
+      retryDelayMs: 0,
+    });
+
+    expect((await stream.next()).value).toEqual({
+      type: "textDelta",
+      delta: "visible",
+    });
+    await expect(stream.next()).rejects.toThrow("after delta");
+    expect(calls).toBe(1);
+  });
+
+  it("stops a stream after the configured whole-stream timeout", async () => {
+    const model: ModelProvider = {
+      name: "stuck-stream",
+      async generate() {
+        return finalMessage;
+      },
+      async *stream() {
+        await new Promise(() => undefined);
+        return finalMessage;
+      },
+    };
+    const stream = streamModelWithPolicy(model, emptyRequest, {
+      timeoutMs: 5,
+    });
+
+    await expect(stream.next()).rejects.toBeInstanceOf(ModelTimeoutError);
   });
 });

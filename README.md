@@ -172,6 +172,7 @@ src/
 ├── runtime/
 │   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
+│   ├── anthropic-stream.ts # SSE 分帧与完整消息聚合
 │   ├── minimax.ts        # Anthropic-compatible API
 │   └── codex-cli.ts      # Codex CLI（实验性）
 ├── tools/
@@ -218,6 +219,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
+- 输出可流式：MiniMax SSE 的文本与工具参数 delta 会实时进入 CLI/Web UI。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
 - 高级能力外置：memory、skills、观测和策略通过 hooks 或 context 变换实现。
 - 默认安全：本机 CLI 后端使用只读 sandbox；示例工具不执行 shell、不写文件。
@@ -229,7 +231,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 
 推荐迭代顺序：
 
-1. streaming model events；
+1. 限流、token/cost budget、并行工具与 OpenTelemetry trace；
 2. SQLite、精确 token budget、摘要与 MemoryIndex；
 3. skill 语义路由、依赖检查与版本信息；
 4. sub-agent 的结构化 handoff、深度与 token/time budget；

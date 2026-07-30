@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 import {
   callModelWithPolicy,
+  streamModelWithPolicy,
   type ModelCallPolicy,
 } from "./model-call.js";
 import type { ContextBuilder } from "./context-builder.js";
@@ -71,26 +72,47 @@ export async function* agentLoop(
     const builtContext = options.contextBuilder
       ? await options.contextBuilder.build(context)
       : context;
-    const assistant = await callModelWithPolicy(
-      model,
-      {
-        systemPrompt: builtContext.systemPrompt,
-        messages: builtContext.messages,
-        tools: builtContext.tools,
-        ...(options.signal ? { signal: options.signal } : {}),
-      },
-      options.modelCall,
-    );
+    const modelRequest = {
+      systemPrompt: builtContext.systemPrompt,
+      messages: builtContext.messages,
+      tools: builtContext.tools,
+      ...(options.signal ? { signal: options.signal } : {}),
+    };
+    let assistant: AssistantMessage;
+    const streamed = model.stream !== undefined;
+    if (streamed) {
+      const stream = streamModelWithPolicy(
+        model,
+        modelRequest,
+        options.modelCall,
+      );
+      while (true) {
+        const next = await stream.next();
+        if (next.done) {
+          assistant = next.value;
+          break;
+        }
+        yield next.value;
+      }
+    } else {
+      assistant = await callModelWithPolicy(
+        model,
+        modelRequest,
+        options.modelCall,
+      );
+    }
     // 模型消息必须先进入历史，下一轮模型才知道自己刚才请求了什么工具。
     lastMessage = assistant;
     context.messages.push(assistant);
     yield { type: "message", message: assistant };
 
     // 将完整消息拆成更适合 UI 消费的细粒度事件。
-    for (const block of assistant.content) {
-      if (block.type === "text") yield { type: "text", text: block.text };
-      if (block.type === "thinking") {
-        yield { type: "thinking", thinking: block.thinking };
+    if (!streamed) {
+      for (const block of assistant.content) {
+        if (block.type === "text") yield { type: "text", text: block.text };
+        if (block.type === "thinking") {
+          yield { type: "thinking", thinking: block.thinking };
+        }
       }
     }
 

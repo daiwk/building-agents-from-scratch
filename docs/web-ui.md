@@ -20,7 +20,7 @@ sequenceDiagram
     B->>S: POST /api/chat
     S->>A: agent.run(input)
     loop 每个 AgentEvent
-        A-->>S: model / tool / text / complete
+        A-->>S: model / textDelta / tool / complete
         S-->>B: 一行 NDJSON
     end
 ```
@@ -28,7 +28,12 @@ sequenceDiagram
 页面持续显示运行状态与耗时；长对话和长轨迹分别滚动。超过一段时间没有新事件时，会
 明确显示仍在等待模型，而不是让用户猜测是否卡住。运行期间可以点击“停止”取消请求。
 
+MiniMax provider 现在会把 SSE 的 `textDelta` 直接穿过 Agent 和 NDJSON 通道交给浏览器，
+所以回答会边生成边显示。`thinkingDelta` 只更新“模型正在推理”的状态，不展示内部思考
+正文；`toolArgumentsDelta` 会显示“正在生成工具参数”，完整 JSON 形成后才校验和执行。
+
 ## 为什么使用 NDJSON
 
-每个事件是一行 JSON，浏览器可以边读取边渲染，不必等待完整响应。它比一次性 JSON
-更适合 Agent，也比第一版就引入 WebSocket 更容易阅读和调试。
+每个事件是一行 JSON，浏览器可以边读取边渲染，不必等待完整响应。模型服务到 Node
+使用 SSE，Node 到浏览器使用 NDJSON：两段协议职责清晰，也比第一版就引入 WebSocket
+更容易阅读和调试。

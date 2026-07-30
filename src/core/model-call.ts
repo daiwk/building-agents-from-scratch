@@ -2,6 +2,7 @@ import type {
   AssistantMessage,
   ModelProvider,
   ModelRequest,
+  ModelStreamEvent,
 } from "./types.js";
 
 export type ModelRetryInfo = {
@@ -84,9 +85,122 @@ export async function callModelWithPolicy(
   }
 }
 
+/**
+ * streaming 版模型调用策略。
+ *
+ * 在第一个 delta 发给调用者之前，临时错误仍可安全重试；一旦已经向 UI 输出内容，就
+ * 不再自动重试，否则用户会看到重复片段。timeout 覆盖整个 stream 生命周期。
+ */
+export async function* streamModelWithPolicy(
+  model: ModelProvider,
+  request: ModelRequest,
+  policy: ModelCallPolicy = {},
+): AsyncGenerator<ModelStreamEvent, AssistantMessage> {
+  if (!model.stream) {
+    return await callModelWithPolicy(model, request, policy);
+  }
+
+  const maxRetries = nonNegativeInteger(policy.maxRetries ?? 0, "maxRetries");
+  const retryDelayMs = nonNegativeNumber(
+    policy.retryDelayMs ?? 500,
+    "retryDelayMs",
+  );
+  const maxRetryDelayMs = nonNegativeNumber(
+    policy.maxRetryDelayMs ?? 8_000,
+    "maxRetryDelayMs",
+  );
+  const timeoutMs = nonNegativeNumber(
+    policy.timeoutMs ?? 120_000,
+    "timeoutMs",
+  );
+  const shouldRetry = policy.shouldRetry ?? isRetryableError;
+
+  for (let attempt = 0; ; attempt += 1) {
+    throwIfAborted(request.signal);
+    const control = createStreamControl(request.signal, timeoutMs);
+    const stream = model.stream({
+      ...request,
+      signal: control.controller.signal,
+    });
+    let emittedDelta = false;
+
+    try {
+      while (true) {
+        const next = await Promise.race([
+          stream.next(),
+          control.failure,
+        ]);
+        if (next.done) return next.value;
+        emittedDelta = true;
+        yield next.value;
+      }
+    } catch (error) {
+      // 让 provider 有机会释放 response reader/socket；失败清理不覆盖原错误。
+      control.cleanup();
+      void stream.return(undefined as never).catch(() => undefined);
+      throwIfAborted(request.signal);
+      if (
+        emittedDelta ||
+        attempt >= maxRetries ||
+        !shouldRetry(error)
+      ) {
+        throw error;
+      }
+
+      const delayMs = Math.min(
+        retryDelayMs * 2 ** attempt,
+        maxRetryDelayMs,
+      );
+      await policy.onRetry?.({ attempt: attempt + 1, delayMs, error });
+      await wait(delayMs, request.signal);
+    } finally {
+      control.cleanup();
+    }
+  }
+}
+
 function isRetryableError(error: unknown): boolean {
   // fetch 在网络断开、DNS 失败等情况下通常抛出 TypeError。
   return error instanceof RetryableModelError || error instanceof TypeError;
+}
+
+function createStreamControl(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): {
+  controller: AbortController;
+  failure: Promise<never>;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectFailure: (reason: Error) => void = () => undefined;
+  const failure = new Promise<never>((_, reject) => {
+    rejectFailure = reject;
+  });
+  const forwardAbort = () => {
+    const reason = abortReason(parentSignal);
+    controller.abort(reason);
+    rejectFailure(reason);
+  };
+  parentSignal?.addEventListener("abort", forwardAbort, { once: true });
+
+  if (timeoutMs > 0) {
+    timer = setTimeout(() => {
+      const error = new ModelTimeoutError(timeoutMs);
+      controller.abort(error);
+      rejectFailure(error);
+    }, timeoutMs);
+  }
+
+  return {
+    controller,
+    failure,
+    cleanup() {
+      if (timer) clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", forwardAbort);
+    },
+  };
 }
 
 async function callWithTimeout(

@@ -18,6 +18,7 @@ classDiagram
       <<interface>>
       +name: string
       +generate(request) AssistantMessage
+      +stream(request) ModelStreamEvent
     }
     class Tool {
       <<interface>>
@@ -99,14 +100,15 @@ Browser
 
 ## 为什么 provider 返回完整消息
 
-首版 `ModelProvider.generate()` 返回完整 `AssistantMessage`，以便初学者先看清
-控制流。对外的 `Agent.run()` 已经是事件流，因此加入 token streaming 时只需：
+`ModelProvider.generate()` 返回完整 `AssistantMessage`，以便初学者先看清控制流。
+可选的 `stream()` 已按同一个协议加入：
 
-1. 把 provider 增加为 `stream()`；
-2. 在循环中边聚合边发出 delta event；
-3. 聚合完成后仍把同样的 `AssistantMessage` 写入 context。
+1. provider 边解析 SSE 边发出 delta event；
+2. provider 内部同步聚合 blocks；
+3. 聚合完成后 return 同样的 `AssistantMessage`；
+4. loop 此时才把完整消息写入 context。
 
-消息结构和工具协议不需要改变。
+没有 `stream()` 的 provider 自动回退 `generate()`；消息结构和工具协议没有改变。
 
 ## Hooks 是扩展腰部
 
