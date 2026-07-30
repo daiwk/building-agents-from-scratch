@@ -6,6 +6,11 @@ import type {
   ToolCallBlock,
   ToolResultMessage,
 } from "./types.js";
+import {
+  callModelWithPolicy,
+  type ModelCallPolicy,
+} from "./model-call.js";
+import { validateToolInput } from "./tool-validation.js";
 
 export type AgentLoopOptions = {
   // 最多允许调用模型多少次，防止模型和工具无限互相调用。
@@ -14,6 +19,8 @@ export type AgentLoopOptions = {
   signal?: AbortSignal;
   // hooks 允许 memory、权限检查和日志插入循环，但不修改循环本身。
   hooks?: AgentHooks;
+  // modelCall 把 timeout/retry 与 Agent 控制循环分离。
+  modelCall?: ModelCallPolicy;
 };
 
 export type AgentHooks = {
@@ -58,12 +65,16 @@ export async function* agentLoop(
     await options.hooks?.beforeModel?.(context);
 
     // Agent 本身不关心 MiniMax 的 HTTP 细节，只调用统一的 model.generate()。
-    const assistant = await model.generate({
-      systemPrompt: context.systemPrompt,
-      messages: context.messages,
-      tools: context.tools,
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
+    const assistant = await callModelWithPolicy(
+      model,
+      {
+        systemPrompt: context.systemPrompt,
+        messages: context.messages,
+        tools: context.tools,
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+      options.modelCall,
+    );
     // 模型消息必须先进入历史，下一轮模型才知道自己刚才请求了什么工具。
     lastMessage = assistant;
     context.messages.push(assistant);
@@ -130,6 +141,21 @@ async function executeTool(
   }
 
   try {
+    // Schema 是给模型的说明，也是宿主执行工具前的运行时安全检查。
+    const validationErrors = validateToolInput(
+      tool.inputSchema,
+      call.arguments,
+    );
+    if (validationErrors.length > 0) {
+      return {
+        role: "tool",
+        toolCallId: call.id,
+        toolName: call.name,
+        content: `Invalid tool arguments: ${validationErrors.join("; ")}`,
+        isError: true,
+      };
+    }
+
     // await 同时兼容同步工具（直接返回 string）和异步工具（返回 Promise）。
     const content = await tool.execute(call.arguments, {
       messages: context.messages,

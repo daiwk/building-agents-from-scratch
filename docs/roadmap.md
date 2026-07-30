@@ -12,6 +12,8 @@
 - Agent 事件；
 - 工具错误恢复；
 - 最大轮次和取消信号；
+- 工具参数运行时校验；
+- 模型 timeout、选择性 retry 和指数退避；
 - MiniMax 与本机 CLI 后端；
 - 三个生命周期 hook。
 
@@ -21,9 +23,9 @@
 
 - `ModelProvider.stream()`；
 - text/thinking/tool-argument delta；
-- timeout、指数退避、限流；
+- ~~timeout、指数退避~~、限流；
 - token/cost budget；
-- JSON Schema 参数校验；
+- ~~JSON Schema 基础参数校验~~（复杂 Schema 后续接成熟 validator）；
 - 并行工具执行策略；
 - OpenTelemetry-compatible trace。
 

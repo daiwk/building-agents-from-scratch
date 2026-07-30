@@ -38,6 +38,7 @@ nav:
   - 5 分钟上手: getting-started.md
   - 核心原理:
       - Agent Loop: concepts/agent-loop.md
+      - 可靠性模块: concepts/reliability.md
       - 架构说明: architecture.md
   - 三种实现:
       - 如何选择: implementations/index.md

@@ -6,6 +6,7 @@ import type {
   ModelRequest,
   Tool,
 } from "../core/index.js";
+import { RetryableModelError } from "../core/index.js";
 
 type MiniMaxProviderOptions = {
   apiKey: string;
@@ -93,7 +94,17 @@ export class MiniMaxProvider implements ModelProvider {
         body.error?.message ??
         body.base_resp?.status_msg ??
         `${response.status} ${response.statusText}`;
-      throw new Error(`MiniMax request failed: ${message}`);
+      const errorMessage = `MiniMax request failed: ${message}`;
+      // 429/5xx 通常是临时限流或服务故障；401/400 重试不会解决问题。
+      if (
+        response.status === 408 ||
+        response.status === 409 ||
+        response.status === 429 ||
+        response.status >= 500
+      ) {
+        throw new RetryableModelError(errorMessage);
+      }
+      throw new Error(errorMessage);
     }
 
     const content = (body.content ?? []).flatMap(toCoreBlock);
