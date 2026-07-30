@@ -1,28 +1,55 @@
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 import { Agent, type ModelProvider } from "../core/index.js";
+import { JsonFileConversationStore } from "../memory/index.js";
 import { CodexCliProvider, MiniMaxProvider } from "../providers/index.js";
-import { calculatorTool, currentTimeTool } from "../tools/index.js";
+import {
+  SkillCatalog,
+  applySkillsToSystemPrompt,
+  loadSkillsFromDirectory,
+} from "../skills/index.js";
+import { createBuiltinToolRegistry } from "../tools/index.js";
+
+// 同一个文件只创建一个 store 实例，保证 Web 多会话写入经过同一条队列。
+const memoryStores = new Map<string, JsonFileConversationStore>();
 
 // CLI 和 Web 共用这个“装配层”，避免两个界面各自创建一套 Agent。
 export function loadLocalEnv(): void {
   if (existsSync(".env")) loadEnvFile(".env");
 }
 
-export function createAgentFromEnv(): Agent {
+export function createAgentFromEnv(sessionId = "default"): Agent {
   const providerName = getProviderName();
   const model = createProvider(providerName);
+  const toolRegistry = createBuiltinToolRegistry();
+  // Codex CLI 适配器本身已经是 Agent，当前不能接收这里注册的工具。
+  const selectedToolNames =
+    providerName === "minimax"
+      ? readList("AGENT_TOOLS", ["calculator", "current_time"])
+      : [];
+  const selectedSkills = loadSelectedSkills();
+  const basePrompt =
+    "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。";
+  const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
+
   return new Agent({
     model,
-    tools:
-      providerName === "minimax" ? [calculatorTool, currentTimeTool] : [],
-    systemPrompt:
-      "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。",
+    tools: toolRegistry.select(selectedToolNames),
+    systemPrompt: applySkillsToSystemPrompt(basePrompt, selectedSkills),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),
       retryDelayMs: readNonNegativeNumber("AGENT_RETRY_DELAY_MS", 500),
     },
+    ...(memoryFile
+      ? {
+          memory: {
+            sessionId,
+            store: getMemoryStore(memoryFile),
+          },
+        }
+      : {}),
   });
 }
 
@@ -67,4 +94,34 @@ function readNonNegativeInteger(name: string, fallback: number): number {
     throw new Error(`${name} must be an integer.`);
   }
   return value;
+}
+
+function readList(name: string, fallback: string[] = []): string[] {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function loadSelectedSkills() {
+  const selectedNames = readList("AGENT_SKILLS");
+  if (selectedNames.length === 0) return [];
+
+  const directory = process.env.AGENT_SKILLS_DIR?.trim() || "skills";
+  const catalog = new SkillCatalog().registerMany(
+    loadSkillsFromDirectory(directory),
+  );
+  return catalog.select(selectedNames);
+}
+
+function getMemoryStore(filePath: string): JsonFileConversationStore {
+  const absolutePath = resolve(filePath);
+  let store = memoryStores.get(absolutePath);
+  if (!store) {
+    store = new JsonFileConversationStore(absolutePath);
+    memoryStores.set(absolutePath, store);
+  }
+  return store;
 }
