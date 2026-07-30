@@ -1,12 +1,19 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
-import { Agent, type ModelProvider } from "../core/index.js";
+import {
+  Agent,
+  RecentContextBuilder,
+  type AgentHooks,
+  type ContextBuilder,
+  type ModelProvider,
+} from "../core/index.js";
 import { JsonFileConversationStore } from "../memory/index.js";
 import { CodexCliProvider, MiniMaxProvider } from "../providers/index.js";
 import {
   SkillCatalog,
   applySkillsToSystemPrompt,
+  createDynamicSkillHook,
   loadSkillsFromDirectory,
 } from "../skills/index.js";
 import { createBuiltinToolRegistry } from "../tools/index.js";
@@ -28,15 +35,20 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
     providerName === "minimax"
       ? readList("AGENT_TOOLS", ["calculator", "current_time"])
       : [];
-  const selectedSkills = loadSelectedSkills();
   const basePrompt =
     "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。";
+  const skillConfiguration = configureSkills(basePrompt);
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
+  const contextBuilder = createContextBuilderFromEnv();
 
   return new Agent({
     model,
     tools: toolRegistry.select(selectedToolNames),
-    systemPrompt: applySkillsToSystemPrompt(basePrompt, selectedSkills),
+    systemPrompt: skillConfiguration.systemPrompt,
+    ...(skillConfiguration.hooks
+      ? { hooks: skillConfiguration.hooks }
+      : {}),
+    ...(contextBuilder ? { contextBuilder } : {}),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),
@@ -105,15 +117,60 @@ function readList(name: string, fallback: string[] = []): string[] {
     .filter(Boolean);
 }
 
-function loadSelectedSkills() {
+function configureSkills(basePrompt: string): {
+  systemPrompt: string;
+  hooks?: AgentHooks;
+} {
   const selectedNames = readList("AGENT_SKILLS");
-  if (selectedNames.length === 0) return [];
+  if (selectedNames.length === 0) return { systemPrompt: basePrompt };
 
   const directory = process.env.AGENT_SKILLS_DIR?.trim() || "skills";
   const catalog = new SkillCatalog().registerMany(
     loadSkillsFromDirectory(directory),
   );
-  return catalog.select(selectedNames);
+  if (selectedNames.includes("auto")) {
+    if (selectedNames.length !== 1) {
+      throw new Error("AGENT_SKILLS=auto cannot be combined with skill names.");
+    }
+    return {
+      systemPrompt: basePrompt,
+      hooks: createDynamicSkillHook({ basePrompt, catalog }),
+    };
+  }
+  return {
+    systemPrompt: applySkillsToSystemPrompt(
+      basePrompt,
+      catalog.select(selectedNames),
+    ),
+  };
+}
+
+function createContextBuilderFromEnv(): ContextBuilder | undefined {
+  const maxMessages = process.env.AGENT_CONTEXT_MAX_MESSAGES;
+  const maxCharacters = process.env.AGENT_CONTEXT_MAX_CHARACTERS;
+  if (maxMessages === undefined && maxCharacters === undefined) {
+    return undefined;
+  }
+  return new RecentContextBuilder({
+    maxMessages: readPositiveInteger(
+      "AGENT_CONTEXT_MAX_MESSAGES",
+      40,
+    ),
+    maxCharacters: readPositiveInteger(
+      "AGENT_CONTEXT_MAX_CHARACTERS",
+      50_000,
+    ),
+  });
+}
+
+function readPositiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
 }
 
 function getMemoryStore(filePath: string): JsonFileConversationStore {

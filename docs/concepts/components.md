@@ -1,20 +1,23 @@
-# Tools、Memory 与 Skills
+# Tools、Memory、Skills 与 Sub-agent
 
-这三个组件经常被混在一个 Agent 类里。教学版把它们分开，因为它们回答的是三个不同问题：
+这些组件经常被混在一个 Agent 类里。教学版把它们分开，因为它们回答的是不同问题：
 
 | 组件 | 回答的问题 | 不负责什么 |
 |---|---|---|
 | ToolRegistry | 本应用有哪些工具？本 Agent 被授权使用哪些？ | 不执行 Agent loop |
-| ConversationStore | 这个 session 之前有哪些消息？ | 不做摘要和语义检索 |
+| ConversationStore | 这个 session 之前有哪些消息？ | 不决定本轮发给模型哪些消息 |
+| ContextBuilder | 完整历史中的哪些消息进入本轮模型请求？ | 不删除或持久化历史 |
 | SkillCatalog | 有哪些指令包？本 Agent 加载哪些？ | 不自动执行代码或开放工具 |
+| agentAsTool | 如何把独立 child Agent 委派给父 Agent？ | 不共享父 Agent 私有历史 |
 
 ```mermaid
 flowchart LR
     TR["ToolRegistry"] -->|"select(names)"| T["AgentContext.tools"]
     CS["ConversationStore"] -->|"load(sessionId)"| M["AgentContext.messages"]
+    M -->|"build(context)"| CB["ContextBuilder"]
     SC["SkillCatalog"] -->|"select(names)"| P["system prompt"]
     T --> A["Agent Loop"]
-    M --> A
+    CB --> A
     P --> A
     A -->|"save(messages)"| CS
 ```
@@ -80,9 +83,35 @@ JSON 写入使用临时文件加 rename，并将文件权限设置为 `0600`。�
 内的写入排队，不适合多个 Node 进程共享。生产环境应实现同一个接口并换成
 SQLite/PostgreSQL。
 
+## 构建本轮 Context
+
+`RecentContextBuilder` 保留最近的完整对话轮次，用字符数近似 token budget：
+
+```ts
+const agent = new Agent({
+  model,
+  contextBuilder: new RecentContextBuilder({
+    maxMessages: 40,
+    maxCharacters: 50_000,
+  }),
+});
+```
+
+也可以通过环境变量启用：
+
+```dotenv
+AGENT_CONTEXT_MAX_MESSAGES=40
+AGENT_CONTEXT_MAX_CHARACTERS=50000
+```
+
+截断只影响本轮 `ModelRequest`，`AgentContext` 与 ConversationStore 仍保留完整历史。
+组件按 user message 划分轮次，所以不会只保留 tool result、却丢掉对应的 tool call。
+字符数只是便于理解的近似值；生产系统可以实现同一 `ContextBuilder` 接口，改用 tokenizer、
+摘要和检索。
+
 !!! info "Memory 不只是一个数据库"
-    当前实现的是 ConversationStore。后续的 ContextBuilder 负责截断与摘要，
-    MemoryIndex 负责跨会话检索；三者不应塞进同一个类。
+    ConversationStore 负责保存，ContextBuilder 负责本轮上下文，未来的 MemoryIndex
+    负责跨会话检索；三者不应塞进同一个类。
 
 ## 读取 SKILL.md
 
@@ -114,6 +143,16 @@ AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
 ```
 
+也可以使用动态发现：
+
+```dotenv
+AGENT_SKILLS=auto
+```
+
+`SkillCatalog.discover()` 会对最新用户输入与 skill 的 name/description 做透明关键词评分，
+`createDynamicSkillHook()` 再把命中的少量 skill 注入 prompt。它不需要额外模型调用，适合
+教学和少量 skill；这不是语义检索，skill 数量增加后应替换为 BM25、embedding 或模型路由。
+
 Loader 有意设置以下边界：
 
 - 单个文件最多 256 KiB；
@@ -125,12 +164,37 @@ Loader 有意设置以下边界：
 只有 `SkillCatalog.select()` 选中的指令会带明确边界注入 system prompt。把所有 skill
 全文都塞给模型会增加噪音、成本和 prompt injection 面积。
 
+## 把 child Agent 作为工具
+
+`agentAsTool()` 是 Sub-agent 的第一个最小原语：
+
+```ts
+const researcher = agentAsTool({
+  name: "researcher",
+  description: "委派一个独立研究任务",
+  createAgent: () =>
+    new Agent({
+      model,
+      tools: [searchTool],
+      maxTurns: 4,
+    }),
+});
+
+const parent = new Agent({ model, tools: [researcher] });
+```
+
+每次 tool call 都通过 factory 创建新 child，因此不会共享父 Agent 或其他任务的可变
+messages。child 只收到结构化 `task`，父级取消信号会继续传递；child 的工具权限、
+memory 和 turn budget 都要显式配置。当前返回最终文本，结构化 handoff、depth/token
+budget 和并行 scheduler 仍留在后续阶段。
+
 ## 下一步扩展点
 
 - ToolRegistry：工具权限、租户策略、lazy loader；
 - ConversationStore：SQLite、加密、TTL；
-- ContextBuilder：token budget、摘要、检索结果排序；
-- SkillCatalog：基于描述的动态选择、依赖检查和版本信息。
+- ContextBuilder：精确 token budget、摘要、检索结果排序；
+- SkillCatalog：语义路由、依赖检查和版本信息；
+- agentAsTool：结构化 handoff、深度预算和并行 scheduler。
 
 ## 三套实现的对应关系
 
@@ -141,3 +205,5 @@ Loader 有意设置以下边界：
 | 会话 memory | `JsonFileConversationStore` | `JsonFileConversationStore` | 通用 JSON store + pi messages |
 | Skill | `SkillCatalog` | Python `SkillCatalog` | 复用 TypeScript loader/catalog |
 | Timeout/retry | `ModelCallPolicy` | Python `ModelCallPolicy` | pi-ai 原生 stream options |
+| 最近轮次 Context | `RecentContextBuilder` | 待对齐 | 使用 pi-agent 原生 context |
+| Sub-agent adapter | `agentAsTool` | 待对齐 | 待提供对照示例 |

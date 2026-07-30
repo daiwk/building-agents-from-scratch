@@ -167,7 +167,8 @@ src/
 ├── core/
 │   ├── types.ts          # 消息、工具、模型、事件协议
 │   ├── agent-loop.ts     # 唯一的控制循环
-│   └── agent.ts          # 有状态 Agent
+│   ├── agent.ts          # 有状态 Agent
+│   └── context-builder.ts # 本轮模型上下文裁剪
 ├── runtime/
 │   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
@@ -181,7 +182,10 @@ src/
 │   └── json-file-store.ts # 本地持久化会话
 ├── skills/
 │   ├── loader.ts          # 安全读取 SKILL.md
-│   └── catalog.ts         # 选择并注入 skill
+│   ├── catalog.ts         # 选择、发现并注入 skill
+│   └── router.ts          # 根据用户输入动态选择
+├── subagents/
+│   └── agent-as-tool.ts   # 将独立 child Agent 包装成工具
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
@@ -208,7 +212,9 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 协议小而稳定：模型只需实现 `ModelProvider.generate()`，工具只需实现 `Tool.execute()`。
 - 能力显式授权：ToolRegistry 注册工具，但只有选中的工具才会开放给模型。
 - 记忆可替换：ConversationStore 可以从内存实现切换到 JSON 或数据库。
+- 上下文可裁剪：ContextBuilder 只改变本轮模型输入，不删除完整历史。
 - Skill 只读：SKILL.md 只作为选中的指令注入，不会自动执行代码或获得工具权限。
+- 子 Agent 隔离：agentAsTool 每次创建独立 child，不共享父 Agent 的可变消息数组。
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
@@ -224,9 +230,9 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 推荐迭代顺序：
 
 1. streaming model events；
-2. 可持久化 memory 与 context compaction；
-3. skills 的发现、选择和 prompt 注入；
-4. 把 Agent 包装成 Tool，实现 sub-agent；
+2. SQLite、精确 token budget、摘要与 MemoryIndex；
+3. skill 语义路由、依赖检查与版本信息；
+4. sub-agent 的结构化 handoff、深度与 token/time budget；
 5. scheduler + shared event bus，实现 multi-agent；
 6. 用状态节点和条件边实现 graph；
 7. eval + versioned artifacts + approval gate，实现受控 self-evolve。

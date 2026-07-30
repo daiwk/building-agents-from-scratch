@@ -44,11 +44,17 @@ classDiagram
     class SkillCatalog {
       +register(skill)
       +select(names)
+      +discover(query)
+    }
+    class ContextBuilder {
+      <<interface>>
+      +build(context) BuiltContext
     }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
     Agent --> ConversationStore
+    Agent --> ContextBuilder
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool
@@ -115,7 +121,8 @@ hook 可以改变 context，但不应该偷偷执行下一轮循环。控制流�
 
 ## Sub-agent 为什么可以是 Tool
 
-最小组合方式是把另一个 `Agent.run()` 包装成 `Tool.execute()`：
+最小组合方式是用已经提供的 `agentAsTool()`，把另一个 `Agent.run()` 包装成
+`Tool.execute()`：
 
 ```text
 parent model → call research_agent tool
@@ -124,8 +131,9 @@ parent model → call research_agent tool
              → parent model
 ```
 
-这不需要修改核心。需要并行、共享状态、取消传播和预算分配时，再新增 scheduler，
-而不是把这些概念提前塞进 `Agent`。
+这不需要修改核心。adapter 每次创建独立 child，只传入 task，并向下传递取消信号。
+需要并行、显式上下文传递和预算分配时，再新增 scheduler，而不是把这些概念提前塞进
+`Agent`。
 
 ## 安全边界
 
