@@ -63,6 +63,11 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  # Material 图标短代码（例如 :material-arrow-right:）依赖 emoji 扩展。
+  # 缺少这段配置时，短代码会像普通文本一样直接显示在页面上。
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
