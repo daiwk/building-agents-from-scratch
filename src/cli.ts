@@ -64,7 +64,7 @@ function createProvider(name: string): ModelProvider {
       model: process.env.MINIMAX_MODEL ?? "MiniMax-M2.7",
       baseUrl:
         process.env.MINIMAX_BASE_URL ??
-        "https://api.minimax.io/anthropic/v1",
+        "https://api.minimaxi.com/anthropic/v1",
     });
   }
   if (name === "codex") {

@@ -38,5 +38,11 @@ describe("MiniMaxProvider", () => {
       name: "calculator",
     });
     expect(message.usage).toEqual({ input: 10, output: 5 });
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "https://api.minimaxi.com/anthropic/v1/messages",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "x-api-key": "test-key" }),
+      }),
+    );
   });
 });

@@ -55,7 +55,7 @@ export class MiniMaxProvider implements ModelProvider {
     if (!options.apiKey) throw new Error("MiniMax API key is required.");
     this.apiKey = options.apiKey;
     this.model = options.model ?? "MiniMax-M2.7";
-    this.baseUrl = (options.baseUrl ?? "https://api.minimax.io/anthropic/v1")
+    this.baseUrl = (options.baseUrl ?? "https://api.minimaxi.com/anthropic/v1")
       .replace(/\/$/, "");
     this.maxTokens = options.maxTokens ?? 8192;
     this.temperature = options.temperature ?? 1;
