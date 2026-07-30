@@ -39,11 +39,12 @@
 把 memory 拆成三个不同问题：
 
 1. `ConversationStore`：已提供内存/JSON 教学实现，下一步接 SQLite；
-2. `ContextBuilder`：本轮给模型哪些内容；
+2. `ContextBuilder`：已提供 `RecentContextBuilder`，按最近完整轮次和字符预算构造本轮请求；
 3. `MemoryIndex`：跨会话语义/关键词检索。
 
-第一步在 `beforeModel` 做截断或摘要。之后再增加 episodic、semantic、procedural
-memory，避免一开始就把“memory”误写成一个巨型向量库类。
+`RecentContextBuilder` 只裁剪发给模型的快照，不删除 ConversationStore 中的完整历史，
+并保证 tool call/result 不被截成孤立消息。下一步加入精确 token 计数与摘要，再增加
+episodic、semantic、procedural memory，避免把“memory”误写成一个巨型向量库类。
 
 ## Stage 3：Skills
 
@@ -58,14 +59,20 @@ type Skill = {
 };
 ```
 
-基础 load → select → inject 已完成；下一步加入 discover 与动态选择。只把选中的 skill 指令放入 context，
-不要把全部技能全文塞进 system prompt。技能带来的工具仍走同一个权限边界。
+基础 load → select → inject 已完成；`SkillCatalog.discover()` 与
+`createDynamicSkillHook()` 也已提供透明的关键词动态选择，可用 `AGENT_SKILLS=auto`
+启用。只把选中的 skill 指令放入 context，不要把全部技能全文塞进 system prompt。
+
+当前 discover 是适合教学和少量 skill 的确定性 name/description 匹配，不是语义检索。
+下一步可在不改变 catalog 边界的前提下替换为 BM25、embedding 或模型路由。技能带来的
+工具仍走同一个权限边界。
 
 ## Stage 4：Sub-agent 和 Multi-agent
 
-先实现 `agentAsTool(child)`，让父 Agent 可以委派一个有边界的任务。然后加入：
+`agentAsTool({ createAgent })` 已实现：父 Agent 可以把独立 task 委派给新建的 child，
+不共享可变 messages，并把父级取消信号向下传递。然后加入：
 
-- 父子取消传播；
+- 更完整的父子取消与超时传播；
 - depth、turn、token 和时间预算；
 - 只读或显式挑选的上下文传递；
 - 结构化 handoff result；

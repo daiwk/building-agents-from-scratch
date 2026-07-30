@@ -10,6 +10,7 @@ import {
   callModelWithPolicy,
   type ModelCallPolicy,
 } from "./model-call.js";
+import type { ContextBuilder } from "./context-builder.js";
 import { validateToolInput } from "./tool-validation.js";
 
 export type AgentLoopOptions = {
@@ -21,6 +22,8 @@ export type AgentLoopOptions = {
   hooks?: AgentHooks;
   // modelCall 把 timeout/retry 与 Agent 控制循环分离。
   modelCall?: ModelCallPolicy;
+  // contextBuilder 只裁剪本轮模型输入，不删除 Agent 保存的完整消息历史。
+  contextBuilder?: ContextBuilder;
 };
 
 export type AgentHooks = {
@@ -65,12 +68,15 @@ export async function* agentLoop(
     await options.hooks?.beforeModel?.(context);
 
     // Agent 本身不关心 MiniMax 的 HTTP 细节，只调用统一的 model.generate()。
+    const builtContext = options.contextBuilder
+      ? await options.contextBuilder.build(context)
+      : context;
     const assistant = await callModelWithPolicy(
       model,
       {
-        systemPrompt: context.systemPrompt,
-        messages: context.messages,
-        tools: context.tools,
+        systemPrompt: builtContext.systemPrompt,
+        messages: builtContext.messages,
+        tools: builtContext.tools,
         ...(options.signal ? { signal: options.signal } : {}),
       },
       options.modelCall,

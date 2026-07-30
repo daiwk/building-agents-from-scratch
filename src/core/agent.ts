@@ -12,6 +12,7 @@ import type {
 } from "./types.js";
 import type { ModelCallPolicy } from "./model-call.js";
 import type { AgentMemoryOptions } from "./memory.js";
+import type { ContextBuilder } from "./context-builder.js";
 
 export type AgentOptions = {
   model: ModelProvider;
@@ -21,6 +22,7 @@ export type AgentOptions = {
   hooks?: AgentHooks;
   modelCall?: ModelCallPolicy;
   memory?: AgentMemoryOptions;
+  contextBuilder?: ContextBuilder;
 };
 
 /**
@@ -36,6 +38,7 @@ export class Agent {
   private readonly hooks: AgentHooks | undefined;
   private readonly modelCall: ModelCallPolicy | undefined;
   private readonly memory: AgentMemoryOptions | undefined;
+  private readonly contextBuilder: ContextBuilder | undefined;
   private memoryLoaded = false;
 
   constructor(options: AgentOptions) {
@@ -45,6 +48,7 @@ export class Agent {
     this.hooks = options.hooks;
     this.modelCall = options.modelCall;
     this.memory = options.memory;
+    this.contextBuilder = options.contextBuilder;
     this.context = {
       systemPrompt: options.systemPrompt ?? "You are a helpful assistant.",
       messages: [],
@@ -62,12 +66,14 @@ export class Agent {
     this.context.messages.push({ role: "user", content: input });
     const hooks = options.hooks ?? this.hooks;
     const modelCall = options.modelCall ?? this.modelCall;
+    const contextBuilder = options.contextBuilder ?? this.contextBuilder;
     // yield* 把内部生成器产生的事件原样转发给外部调用者。
     try {
       return yield* agentLoop(this.context, this.model, {
         maxTurns: options.maxTurns ?? this.maxTurns,
         ...(hooks ? { hooks } : {}),
         ...(modelCall ? { modelCall } : {}),
+        ...(contextBuilder ? { contextBuilder } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } finally {

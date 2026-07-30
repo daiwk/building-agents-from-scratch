@@ -1,7 +1,8 @@
 # TypeScript 版
 
-TypeScript 版增加了异步工具、取消信号、生命周期 hooks 和事件流，适合 Node.js 与
-Web 应用。核心文件均包含中文注释，也会解释新人不熟悉的语法。
+TypeScript 版增加了异步工具、取消信号、生命周期 hooks、ContextBuilder、动态 Skill
+和 Sub-agent adapter，适合 Node.js 与 Web 应用。核心文件均包含中文注释，也会解释
+新人不熟悉的语法。
 
 ## 只先认识五个语法
 
@@ -35,3 +36,17 @@ npm run check
 - `afterTool`：审计、指标和长期记忆。
 
 hooks 可以改变上下文，但不应该偷偷推进下一轮。这样所有控制流仍能在一个文件中追踪。
+
+## 快速启用 Context 与动态 Skill
+
+```dotenv
+# 只限制本轮发给模型的快照，完整历史仍会持久化
+AGENT_CONTEXT_MAX_MESSAGES=40
+AGENT_CONTEXT_MAX_CHARACTERS=50000
+
+# 根据最新用户输入匹配少量 SKILL.md
+AGENT_SKILLS=auto
+```
+
+`RecentContextBuilder` 使用字符数近似 token 数并保留完整轮次。`AGENT_SKILLS=auto`
+使用确定性关键词匹配，适合学习和小型 skill 集合，不等同于语义检索。
