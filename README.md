@@ -46,10 +46,11 @@ npm install
 cp .env.example .env
 ```
 
-在 `.env` 中填入 MiniMax Token Plan Key：
+在 `.env` 中填入国内版 MiniMax Token Plan Key：
 
 ```dotenv
 MINIMAX_API_KEY=sk-cp-...
+MINIMAX_BASE_URL=https://api.minimaxi.com/anthropic/v1
 AGENT_PROVIDER=minimax
 ```
 
@@ -67,9 +68,16 @@ npm run dev
 
 终端会同时展示 tool call、tool result 和最终答案，因此可以直接观察整个 loop。
 
-MiniMax 后端使用官方
-[Anthropic-compatible Messages API](https://platform.minimax.io/docs/api-reference/text-chat-anthropic)。
+MiniMax 后端默认使用国内站官方
+[Anthropic-compatible Messages API](https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic)：
+
+```text
+https://api.minimaxi.com/anthropic/v1/messages
+```
+
 Token Plan Key 和普通按量 API Key 不可混用；个人交互适合 Token Plan，生产服务应按官方建议评估按量方案。
+国内版和国际版 Token Plan Key 也属于不同服务区域。国际站用户需要把
+`MINIMAX_BASE_URL` 改为 `https://api.minimax.io/anthropic/v1`。
 
 ## 最小用法
 
