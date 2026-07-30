@@ -14,6 +14,9 @@
 - 最大轮次和取消信号；
 - 工具参数运行时校验；
 - 模型 timeout、选择性 retry 和指数退避；
+- ToolRegistry 与常用工具按名称授权；
+- ConversationStore（内存与本地 JSON）；
+- SKILL.md 读取、选择和 prompt 注入；
 - MiniMax 与本机 CLI 后端；
 - 三个生命周期 hook。
 
@@ -35,7 +38,7 @@
 
 把 memory 拆成三个不同问题：
 
-1. `ConversationStore`：会话持久化（SQLite/JSONL）；
+1. `ConversationStore`：已提供内存/JSON 教学实现，下一步接 SQLite；
 2. `ContextBuilder`：本轮给模型哪些内容；
 3. `MemoryIndex`：跨会话语义/关键词检索。
 
@@ -55,7 +58,7 @@ type Skill = {
 };
 ```
 
-流程为 discover → select → load → inject。只把选中的 skill 指令放入 context，
+基础 load → select → inject 已完成；下一步加入 discover 与动态选择。只把选中的 skill 指令放入 context，
 不要把全部技能全文塞进 system prompt。技能带来的工具仍走同一个权限边界。
 
 ## Stage 4：Sub-agent 和 Multi-agent

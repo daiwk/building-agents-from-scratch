@@ -31,11 +31,28 @@ classDiagram
       +beforeTool(call, context)
       +afterTool(call, result, context)
     }
+    class ConversationStore {
+      <<interface>>
+      +load(sessionId)
+      +save(sessionId, messages)
+      +clear(sessionId)
+    }
+    class ToolRegistry {
+      +register(tool)
+      +select(names)
+    }
+    class SkillCatalog {
+      +register(skill)
+      +select(names)
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
+    Agent --> ConversationStore
     AgentContext o-- Tool
     Agent --> AgentHooks
+    ToolRegistry --> Tool
+    SkillCatalog --> AgentContext
 ```
 
 `Agent` 只负责持有状态。`agentLoop()` 才是算法，并且也可以脱离 `Agent`

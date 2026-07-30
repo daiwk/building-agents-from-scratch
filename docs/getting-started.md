@@ -53,6 +53,17 @@ MINIMAX_MODEL=MiniMax-M2.7
 AGENT_PROVIDER=minimax
 ```
 
+可选开启工具选择、持久化 memory 和示例 skill：
+
+```dotenv
+AGENT_TOOLS=calculator,current_time
+AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_SKILLS_DIR=skills
+AGENT_SKILLS=tool-first
+```
+
+不设置 `AGENT_MEMORY_FILE` 时仍保持原来的纯内存行为。
+
 !!! warning "国内站与国际站不能混用"
     本项目默认使用国内站 `api.minimaxi.com`。国内站 Key 不应发送到
     `api.minimax.io`，反过来也一样。

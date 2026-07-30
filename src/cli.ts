@@ -9,7 +9,7 @@ import {
 loadLocalEnv();
 
 const providerName = getProviderName();
-const agent = createAgentFromEnv();
+const agent = createAgentFromEnv(process.env.AGENT_SESSION_ID ?? "cli");
 const readline = createInterface({ input: stdin, output: stdout });
 
 console.log(`from-scratch agent · provider=${providerName}`);
@@ -21,7 +21,7 @@ try {
     if (!input) continue;
     if (input === "/exit") break;
     if (input === "/reset") {
-      agent.reset();
+      await agent.reset();
       console.log("memory cleared\n");
       continue;
     }

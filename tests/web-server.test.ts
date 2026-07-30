@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { Agent, type ModelProvider } from "../src/core/index.js";
+import {
+  Agent,
+  InMemoryConversationStore,
+  type ModelProvider,
+} from "../src/core/index.js";
 import { createWebServer } from "../src/web/server.js";
 
 const servers: Server[] = [];
@@ -57,6 +61,50 @@ describe("web server", () => {
     expect(events.some((event) => event.type === "thinking")).toBe(false);
     expect(events).toContainEqual({ type: "text", text: "测试回答" });
     expect(events.some((event) => event.type === "agentEnd")).toBe(true);
+  });
+
+  it("uses the browser session id for memory and clears it on reset", async () => {
+    const store = new InMemoryConversationStore();
+    const model: ModelProvider = {
+      name: "memory-model",
+      async generate() {
+        return {
+          role: "assistant",
+          content: [{ type: "text", text: "记住了" }],
+          stopReason: "stop",
+        };
+      },
+    };
+    const server = createWebServer({
+      createAgent: (sessionId = "fallback") =>
+        new Agent({
+          model,
+          memory: { sessionId, store },
+        }),
+      providerName: model.name,
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const chat = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "记住我", sessionId: "browser-1" }),
+    });
+    await chat.text();
+    expect(await store.load("browser-1")).toHaveLength(2);
+
+    const reset = await fetch(`${baseUrl}/api/reset`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sessionId: "browser-1" }),
+    });
+    expect(reset.status).toBe(200);
+    expect(await store.load("browser-1")).toEqual([]);
   });
 });
 

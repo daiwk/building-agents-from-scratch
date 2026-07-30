@@ -4,5 +4,6 @@ dist/
 site/
 __pycache__/
 *.py[cod]
+.agent-data/
 .env
 *.log

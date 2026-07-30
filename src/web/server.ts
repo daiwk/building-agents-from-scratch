@@ -17,7 +17,7 @@ import {
 
 type WebServerOptions = {
   // `?` 表示测试可以传入这些配置，正式运行时也可以全部省略。
-  createAgent?: () => Agent;
+  createAgent?: (sessionId?: string) => Agent;
   providerName?: string;
   webRoot?: string;
 };
@@ -65,7 +65,15 @@ export function createWebServer(options: WebServerOptions = {}): Server {
         const body = await readJson(request);
         const sessionId =
           typeof body.sessionId === "string" ? body.sessionId : "";
-        if (sessionId) sessions.delete(sessionId);
+        if (sessionId) {
+          if (!/^[\w-]{1,80}$/.test(sessionId)) {
+            return sendJson(response, 400, { error: "Invalid session id." });
+          }
+          // reset 不仅删除内存中的 Agent，也清除可选的持久化 memory。
+          const agent = sessions.get(sessionId) ?? makeAgent(sessionId);
+          await agent.reset();
+          sessions.delete(sessionId);
+        }
         return sendJson(response, 200, { ok: true });
       }
       if (request.method === "GET") {
@@ -88,7 +96,7 @@ async function handleChat(
   response: ServerResponse,
   sessions: Map<string, Agent>,
   activeSessions: Set<string>,
-  makeAgent: () => Agent,
+  makeAgent: (sessionId?: string) => Agent,
   providerName: string,
 ): Promise<void> {
   const body = (await readJson(request)) as ChatBody;
@@ -109,7 +117,7 @@ async function handleChat(
 
   let agent = sessions.get(sessionId);
   if (!agent) {
-    agent = makeAgent();
+    agent = makeAgent(sessionId);
     if (sessions.size >= 100) {
       const oldest = sessions.keys().next().value as string | undefined;
       if (oldest) sessions.delete(oldest);

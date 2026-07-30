@@ -175,7 +175,13 @@ src/
 │   └── codex-cli.ts      # Codex CLI（实验性）
 ├── tools/
 │   ├── calculator.ts
-│   └── current-time.ts
+│   ├── current-time.ts
+│   └── registry.ts        # 注册与按名称授权工具
+├── memory/
+│   └── json-file-store.ts # 本地持久化会话
+├── skills/
+│   ├── loader.ts          # 安全读取 SKILL.md
+│   └── catalog.ts         # 选择并注入 skill
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
@@ -196,6 +202,9 @@ mkdocs.yml
 
 - 状态显式：全部对话都在 `AgentContext.messages`，没有隐藏全局状态。
 - 协议小而稳定：模型只需实现 `ModelProvider.generate()`，工具只需实现 `Tool.execute()`。
+- 能力显式授权：ToolRegistry 注册工具，但只有选中的工具才会开放给模型。
+- 记忆可替换：ConversationStore 可以从内存实现切换到 JSON 或数据库。
+- Skill 只读：SKILL.md 只作为选中的指令注入，不会自动执行代码或获得工具权限。
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
