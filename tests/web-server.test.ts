@@ -59,7 +59,9 @@ describe("web server", () => {
     expect(events.some((event) => event.type === "agentStart")).toBe(true);
     expect(events.some((event) => event.type === "message")).toBe(false);
     expect(events.some((event) => event.type === "thinking")).toBe(false);
-    expect(events).toContainEqual({ type: "text", text: "测试回答" });
+    expect(events).toContainEqual({ type: "textDelta", delta: "测试" });
+    expect(events).toContainEqual({ type: "textDelta", delta: "回答" });
+    expect(events.some((event) => event.type === "text")).toBe(false);
     expect(events.some((event) => event.type === "agentEnd")).toBe(true);
   });
 
@@ -112,6 +114,15 @@ async function startTestServer() {
   const model: ModelProvider = {
     name: "test-model",
     async generate() {
+      return {
+        role: "assistant",
+        content: [{ type: "text", text: "测试回答" }],
+        stopReason: "stop",
+      };
+    },
+    async *stream() {
+      yield { type: "textDelta", delta: "测试" };
+      yield { type: "textDelta", delta: "回答" };
       return {
         role: "assistant",
         content: [{ type: "text", text: "测试回答" }],

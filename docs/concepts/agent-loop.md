@@ -23,7 +23,7 @@ Agent 允许模型返回一种特殊内容：`tool_call`。宿主程序执行工
 | 角色 | 责任 | 不负责什么 |
 |---|---|---|
 | Context | 保存 system prompt、消息和可用工具 | 不决定下一步 |
-| ModelProvider | 把 Context 发给模型并解析响应 | 不执行工具 |
+| ModelProvider | 把 Context 发给模型并解析完整响应或 delta | 不执行工具 |
 | Tool | 对参数做真实操作并返回结果 | 不推进循环 |
 | Agent loop | 决定何时调用模型、工具和结束 | 不关心具体厂商 API |
 
@@ -43,6 +43,32 @@ for turn in range(max_turns):
         result = execute(call)
         messages.append(result)  # 闭环发生在这里
 ```
+
+## Streaming 不改变反馈环
+
+支持 streaming 的 provider 会先不断产生临时事件：
+
+```text
+textDelta → thinkingDelta → toolArgumentsDelta → 完整 AssistantMessage
+```
+
+CLI 和 Web UI 可以立即消费 delta，但 `AgentContext.messages` 此时仍只有之前的完整
+消息。只有 provider 正常结束并返回完整 `AssistantMessage`，loop 才把它写入历史：
+
+```ts
+const stream = model.stream(request);
+while (true) {
+  const next = await stream.next();
+  if (next.done) {
+    context.messages.push(next.value); // 只在这里提交完整消息
+    break;
+  }
+  yield next.value; // 临时 UI 事件
+}
+```
+
+如果 provider 没有实现 `stream()`，Agent 会自动使用原来的 `generate()`，所以测试模型、
+Codex CLI adapter 和初学者自己的最小 provider 不需要立刻改造。
 
 ## 为什么必须限制轮次
 

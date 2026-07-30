@@ -27,6 +27,7 @@ try {
     }
 
     try {
+      let receivedTextDelta = false;
       for await (const event of agent.run(input)) {
         if (event.type === "toolStart") {
           console.log(
@@ -39,6 +40,14 @@ try {
           );
         }
         if (event.type === "text") console.log(`agent> ${event.text}\n`);
+        if (event.type === "textDelta") {
+          if (!receivedTextDelta) stdout.write("agent> ");
+          stdout.write(event.delta);
+          receivedTextDelta = true;
+        }
+        if (event.type === "agentEnd" && receivedTextDelta) {
+          stdout.write("\n\n");
+        }
       }
     } catch (error) {
       console.error(

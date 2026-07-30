@@ -4,9 +4,11 @@ import type {
   AssistantMessage,
   ModelProvider,
   ModelRequest,
+  ModelStreamEvent,
   Tool,
 } from "../core/index.js";
 import { RetryableModelError } from "../core/index.js";
+import { parseAnthropicMessageStream } from "./anthropic-stream.js";
 
 type MiniMaxProviderOptions = {
   apiKey: string;
@@ -36,7 +38,7 @@ type ApiResponse = {
     cache_read_input_tokens?: number;
     cache_creation_input_tokens?: number;
   };
-  error?: { message?: string };
+  error?: { type?: string; message?: string };
   base_resp?: { status_code?: number; status_msg?: string };
 };
 
@@ -75,15 +77,7 @@ export class MiniMaxProvider implements ModelProvider {
         "x-api-key": this.apiKey,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model: this.model,
-        system: request.systemPrompt,
-        messages: toApiMessages(request.messages),
-        tools: request.tools.map(toApiTool),
-        max_tokens: this.maxTokens,
-        temperature: this.temperature,
-        stream: false,
-      }),
+      body: JSON.stringify(this.createRequestBody(request, false)),
       ...(request.signal ? { signal: request.signal } : {}),
     });
 
@@ -132,6 +126,74 @@ export class MiniMaxProvider implements ModelProvider {
       ...(usage ? { usage } : {}),
     };
   }
+
+  /**
+   * MiniMax 国内 Anthropic-compatible 接口使用标准 SSE。
+   *
+   * delta 会立即 yield 给 UI；blocks 在 provider 内同步累积，只有 message_stop 后才
+   * return 完整 AssistantMessage。
+   */
+  async *stream(
+    request: ModelRequest,
+  ): AsyncGenerator<ModelStreamEvent, AssistantMessage> {
+    const response = await this.request(`${this.baseUrl}/messages`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(this.createRequestBody(request, true)),
+      ...(request.signal ? { signal: request.signal } : {}),
+    });
+    if (!response.ok) {
+      throw await toHttpError(response);
+    }
+    if (!response.body) {
+      throw new RetryableModelError("MiniMax stream has no response body.");
+    }
+
+    return yield* parseAnthropicMessageStream(response.body);
+  }
+
+  private createRequestBody(
+    request: ModelRequest,
+    stream: boolean,
+  ): object {
+    return {
+      model: this.model,
+      system: request.systemPrompt,
+      messages: toApiMessages(request.messages),
+      tools: request.tools.map(toApiTool),
+      max_tokens: this.maxTokens,
+      temperature: this.temperature,
+      stream,
+    };
+  }
+}
+
+async function toHttpError(response: Response): Promise<Error> {
+  const text = await response.text();
+  let message = `${response.status} ${response.statusText}`;
+  try {
+    const body = JSON.parse(text) as ApiResponse;
+    message =
+      body.error?.message ??
+      body.base_resp?.status_msg ??
+      message;
+  } catch {
+    if (text.trim()) message = text.trim();
+  }
+  const error = new Error(`MiniMax request failed: ${message}`);
+  if (
+    response.status === 408 ||
+    response.status === 409 ||
+    response.status === 429 ||
+    response.status >= 500
+  ) {
+    return new RetryableModelError(error.message);
+  }
+  return error;
 }
 
 function toApiTool(tool: Tool): object {

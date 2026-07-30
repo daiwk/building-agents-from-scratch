@@ -128,7 +128,26 @@ export type ModelRequest = {
 export type ModelProvider = {
   readonly name: string;
   generate(request: ModelRequest): Promise<AssistantMessage>;
+  /**
+   * 可选 streaming 接口。yield 只产生临时 delta，return 才交付完整消息。
+   *
+   * Agent loop 会等 return 后再把 AssistantMessage 写入历史，避免取消或网络失败留下
+   * 半条消息。不支持 stream() 的 provider 会自动退回 generate()。
+   */
+  stream?(
+    request: ModelRequest,
+  ): AsyncGenerator<ModelStreamEvent, AssistantMessage>;
 };
+
+export type ModelStreamEvent =
+  | { type: "textDelta"; delta: string }
+  | { type: "thinkingDelta"; delta: string }
+  | {
+      type: "toolArgumentsDelta";
+      toolCallId: string;
+      toolName: string;
+      delta: string;
+    };
 
 /**
  * AgentEvent 是给 CLI、Web UI 和日志系统看的运行轨迹。
@@ -139,6 +158,7 @@ export type ModelProvider = {
 export type AgentEvent =
   | { type: "agentStart" }
   | { type: "turnStart"; turn: number }
+  | ModelStreamEvent
   | { type: "message"; message: AssistantMessage }
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }

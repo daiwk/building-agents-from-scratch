@@ -24,8 +24,8 @@
 
 ## Stage 1：Streaming 与工程可靠性
 
-- `ModelProvider.stream()`；
-- text/thinking/tool-argument delta；
+- ~~`ModelProvider.stream()`~~（不支持时自动回退 `generate()`）；
+- ~~text/thinking/tool-argument delta~~；
 - ~~timeout、指数退避~~、限流；
 - token/cost budget；
 - ~~JSON Schema 基础参数校验~~（复杂 Schema 后续接成熟 validator）；
@@ -33,6 +33,11 @@
 - OpenTelemetry-compatible trace。
 
 原则：先形成完整 assistant message，再写入历史；半条消息不能污染 context。
+
+MiniMax 国内接口已使用 SSE 实现真正的 token streaming。delta 只作为临时
+`AgentEvent` 发给 CLI/Web UI；provider 收到 `message_stop` 并组装出完整
+`AssistantMessage` 后，Agent loop 才写入 history。首个可见 delta 之前的临时失败可以
+retry；首个 delta 之后不自动 retry，避免用户看到重复片段。
 
 ## Stage 2：Memory
 

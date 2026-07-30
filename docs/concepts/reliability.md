@@ -83,6 +83,14 @@ AGENT_MODEL_MAX_RETRIES=1
 AGENT_RETRY_DELAY_MS=500
 ```
 
+### Streaming 的重试边界
+
+`streamModelWithPolicy()` 在第一个 delta 发给 UI 之前仍可重试临时故障。一旦已经发出
+可见 delta，就不会自动重试；否则第二次请求会从头生成，用户可能看到重复文本或重复的
+工具参数。此时错误会明确结束本轮，由调用者决定是否重新发起整个任务。
+
+timeout 覆盖整个 stream 生命周期，用户取消也会继续传给 provider 的 SSE 请求。
+
 ## 为什么独立成模块
 
 `agent-loop.ts` 仍然只负责“模型 → 工具 → 模型”的控制流。参数校验和模型调用策略可以

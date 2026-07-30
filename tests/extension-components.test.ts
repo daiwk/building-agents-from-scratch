@@ -154,7 +154,9 @@ describe("agentAsTool", () => {
       expect(request.messages).toEqual([
         { role: "user", content: "分析这段材料" },
       ]);
-      expect(request.signal).toBe(controller.signal);
+      // ModelCallPolicy 会创建子 AbortSignal，但仍会转发父级取消。
+      expect(request.signal).toBeDefined();
+      expect(request.signal?.aborted).toBe(false);
       return {
         role: "assistant" as const,
         content: [{ type: "text" as const, text: "子任务完成" }],
