@@ -55,12 +55,16 @@ classDiagram
       +record(usage) BudgetSnapshot
       +assertCanStartModelCall()
     }
+    class ModelRateLimiter {
+      +reserve() number
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
     Agent --> ConversationStore
     Agent --> ContextBuilder
     Agent --> BudgetTracker
+    Agent --> ModelRateLimiter
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool

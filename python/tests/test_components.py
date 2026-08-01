@@ -198,6 +198,8 @@ class ComponentTest(unittest.TestCase):
                     "AGENT_MODEL_MAX_RETRIES": "2",
                     "AGENT_RETRY_DELAY_MS": "0",
                     "AGENT_MAX_TOTAL_TOKENS": "1000",
+                    "AGENT_RATE_LIMIT_MAX_REQUESTS": "60",
+                    "AGENT_RATE_LIMIT_WINDOW_MS": "60000",
                 },
                 clear=True,
             ):
@@ -214,6 +216,7 @@ class ComponentTest(unittest.TestCase):
             self.assertEqual(agent.session_id, "python-test")
             self.assertIsNotNone(agent.memory_store)
             self.assertEqual(agent.budget.max_total_tokens, 1000)
+            self.assertEqual(agent.rate_limiter.max_requests, 60)
 
 
 if __name__ == "__main__":

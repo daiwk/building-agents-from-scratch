@@ -4,5 +4,6 @@ export * from "./budget.js";
 export * from "./context-builder.js";
 export * from "./memory.js";
 export * from "./model-call.js";
+export * from "./rate-limit.js";
 export * from "./tool-validation.js";
 export * from "./types.js";

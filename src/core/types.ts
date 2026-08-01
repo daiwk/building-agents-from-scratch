@@ -186,6 +186,7 @@ export type ModelStreamEvent =
 export type AgentEvent =
   | { type: "agentStart" }
   | { type: "turnStart"; turn: number }
+  | { type: "rateLimitWait"; delayMs: number }
   | ModelStreamEvent
   | { type: "message"; message: AssistantMessage }
   | {

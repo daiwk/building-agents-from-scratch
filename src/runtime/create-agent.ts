@@ -5,6 +5,7 @@ import {
   Agent,
   RecentContextBuilder,
   createBudgetFromEnvironment,
+  createRateLimiterFromEnvironment,
   type AgentHooks,
   type ContextBuilder,
   type ModelProvider,
@@ -42,6 +43,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
   const contextBuilder = createContextBuilderFromEnv();
   const budget = createBudgetFromEnvironment();
+  const rateLimiter = createRateLimiterFromEnvironment();
   if (budget && providerName !== "minimax") {
     throw new Error(
       `AGENT_* budget requires a provider with token usage; ${providerName} does not report it.`,
@@ -57,6 +59,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
       : {}),
     ...(contextBuilder ? { contextBuilder } : {}),
     ...(budget ? { budget } : {}),
+    ...(rateLimiter ? { rateLimiter } : {}),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),

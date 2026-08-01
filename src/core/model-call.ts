@@ -4,6 +4,7 @@ import type {
   ModelRequest,
   ModelStreamEvent,
 } from "./types.js";
+import { ModelRateLimiter, waitForRateLimit } from "./rate-limit.js";
 
 export type ModelRetryInfo = {
   // attempt 从 1 开始；这里表示即将进行第几次重试。
@@ -51,6 +52,7 @@ export async function callModelWithPolicy(
   model: ModelProvider,
   request: ModelRequest,
   policy: ModelCallPolicy = {},
+  retryRateLimiter?: ModelRateLimiter,
 ): Promise<AssistantMessage> {
   const maxRetries = nonNegativeInteger(policy.maxRetries ?? 0, "maxRetries");
   const retryDelayMs = nonNegativeNumber(
@@ -69,6 +71,10 @@ export async function callModelWithPolicy(
 
   for (let attempt = 0; ; attempt += 1) {
     throwIfAborted(request.signal);
+    // 首次调用已由 Agent loop 预留；这里让重试也遵守同一个请求速率。
+    if (attempt > 0 && retryRateLimiter) {
+      await waitForRateLimit(retryRateLimiter.reserve(), request.signal);
+    }
     try {
       return await callWithTimeout(model, request, timeoutMs);
     } catch (error) {
@@ -95,9 +101,15 @@ export async function* streamModelWithPolicy(
   model: ModelProvider,
   request: ModelRequest,
   policy: ModelCallPolicy = {},
+  retryRateLimiter?: ModelRateLimiter,
 ): AsyncGenerator<ModelStreamEvent, AssistantMessage> {
   if (!model.stream) {
-    return await callModelWithPolicy(model, request, policy);
+    return await callModelWithPolicy(
+      model,
+      request,
+      policy,
+      retryRateLimiter,
+    );
   }
 
   const maxRetries = nonNegativeInteger(policy.maxRetries ?? 0, "maxRetries");
@@ -117,6 +129,9 @@ export async function* streamModelWithPolicy(
 
   for (let attempt = 0; ; attempt += 1) {
     throwIfAborted(request.signal);
+    if (attempt > 0 && retryRateLimiter) {
+      await waitForRateLimit(retryRateLimiter.reserve(), request.signal);
+    }
     const control = createStreamControl(request.signal, timeoutMs);
     const stream = model.stream({
       ...request,

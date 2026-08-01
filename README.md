@@ -169,7 +169,8 @@ src/
 │   ├── agent-loop.ts     # 唯一的控制循环
 │   ├── agent.ts          # 有状态 Agent
 │   ├── context-builder.ts # 本轮模型上下文裁剪
-│   └── budget.ts          # 单次任务的 token / 成本预算
+│   ├── budget.ts          # 单次任务的 token / 成本预算
+│   └── rate-limit.ts      # 跨任务共享的模型请求限流
 ├── runtime/
 │   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
@@ -221,6 +222,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
+- 请求可节流：进程内平滑限流跨多次 run 共享，并把等待状态暴露给 UI。
 - 输出可流式：MiniMax SSE 的文本与工具参数 delta 会实时进入 CLI/Web UI。
 - 资源可观察：每个模型响应报告累计 usage，可按自定义币种与单价设置 soft budget。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
@@ -234,7 +236,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 
 推荐迭代顺序：
 
-1. 限流、并行工具与 OpenTelemetry-compatible trace；
+1. 并行工具与 OpenTelemetry-compatible trace；
 2. SQLite、精确 token budget、摘要与 MemoryIndex；
 3. skill 语义路由、依赖检查与版本信息；
 4. sub-agent 的结构化 handoff、深度与 token/time budget；

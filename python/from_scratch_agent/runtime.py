@@ -1,11 +1,13 @@
 """把环境变量装配成 Python Agent，供 CLI 和二次开发复用。"""
 
 import os
+from math import isfinite
 from pathlib import Path
 
 from .agent import Agent
 from .budget import AgentBudget, TokenPricing
 from .memory import JsonFileConversationStore
+from .rate_limit import ModelRateLimiter
 from .minimax import MiniMaxProvider
 from .registry import create_builtin_tool_registry
 from .reliability import ModelCallPolicy
@@ -70,6 +72,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         "需要精确计算或当前时间时，必须使用工具。"
     )
     budget = _create_budget_from_env()
+    rate_limiter = _create_rate_limiter_from_env()
     return Agent(
         model=model,
         tools=tools,
@@ -94,7 +97,20 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         session_id=session_id
         or os.environ.get("AGENT_SESSION_ID", "python-cli"),
         budget=budget,
+        rate_limiter=rate_limiter,
     )
+
+
+def _create_rate_limiter_from_env() -> ModelRateLimiter | None:
+    max_raw = os.environ.get("AGENT_RATE_LIMIT_MAX_REQUESTS", "").strip()
+    window_raw = os.environ.get("AGENT_RATE_LIMIT_WINDOW_MS", "").strip()
+    if not max_raw and not window_raw:
+        return None
+    if not max_raw or not window_raw:
+        raise ValueError("限流次数和窗口必须一起配置")
+    max_requests = _read_positive_int("AGENT_RATE_LIMIT_MAX_REQUESTS")
+    window_ms = _read_positive_float("AGENT_RATE_LIMIT_WINDOW_MS")
+    return ModelRateLimiter(max_requests, window_ms / 1000)
 
 
 def _create_budget_from_env() -> AgentBudget | None:
@@ -181,3 +197,17 @@ def _read_optional_int(name: str) -> int | None:
     if not raw:
         return None
     return _read_non_negative_int(name, 0)
+
+
+def _read_positive_float(name: str) -> float:
+    value = float(os.environ[name])
+    if not isfinite(value) or value <= 0:
+        raise ValueError(f"{name} 必须大于 0")
+    return value
+
+
+def _read_positive_int(name: str) -> int:
+    value = _read_positive_float(name)
+    if not value.is_integer():
+        raise ValueError(f"{name} 必须是整数")
+    return int(value)

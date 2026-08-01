@@ -14,8 +14,9 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 7. `skills.py`：读取、选择和注入 SKILL.md；
 8. `reliability.py`：timeout、retry 和指数退避；
 9. `budget.py`：单次任务的 token / 成本软预算；
-10. `runtime.py`：统一读取环境变量；
-11. `cli.py`：终端交互外壳。
+10. `rate_limit.py`：跨任务共享的模型请求限流；
+11. `runtime.py`：统一读取环境变量；
+12. `cli.py`：终端交互外壳。
 
 ## 运行
 
@@ -43,6 +44,8 @@ AGENT_MODEL_TIMEOUT_MS=120000
 AGENT_MODEL_MAX_RETRIES=1
 AGENT_RETRY_DELAY_MS=500
 AGENT_MAX_RETRY_DELAY_MS=8000
+AGENT_RATE_LIMIT_MAX_REQUESTS=60
+AGENT_RATE_LIMIT_WINDOW_MS=60000
 AGENT_MAX_TOTAL_TOKENS=120000
 ```
 
@@ -56,6 +59,10 @@ asyncio/httpx，而不是无限增加后台线程。
 预算语义也与 TypeScript 版一致：每次 `run()` 重新累计，MiniMax 返回一条完整响应后产生
 `usage` 事件，达到上限时不再开始下一次模型调用。需要成本预算时，再按 `.env.example`
 填写 `AGENT_MAX_COST`、币种和当前套餐的真实 token 单价。
+
+Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前产生
+`rate_limit_wait`。同步教学版使用 `time.sleep()`；迁移到 asyncio 时可直接替换为
+`await asyncio.sleep()`，限流算法不需要改变。
 
 ## 为什么用 `yield`
 

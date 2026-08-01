@@ -8,6 +8,8 @@ from threading import Thread
 from time import sleep
 from typing import TypeVar
 
+from .rate_limit import ModelRateLimiter
+
 
 T = TypeVar("T")
 
@@ -47,10 +49,13 @@ class ModelCallPolicy:
 def call_with_policy(
     operation: Callable[[], T],
     policy: ModelCallPolicy,
+    retry_rate_limiter: ModelRateLimiter | None = None,
 ) -> T:
     """调用模型；只重试显式标记的临时错误。"""
 
     for attempt in range(policy.max_retries + 1):
+        if attempt > 0 and retry_rate_limiter:
+            sleep(retry_rate_limiter.reserve())
         try:
             return _call_with_timeout(operation, policy.timeout_seconds)
         except RetryableModelError:
