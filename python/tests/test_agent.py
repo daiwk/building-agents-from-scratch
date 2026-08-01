@@ -2,12 +2,14 @@
 
 import unittest
 from typing import Any
+from unittest.mock import patch
 
 from from_scratch_agent import (
     Agent,
     AgentBudget,
     BudgetExceededError,
     BudgetTracker,
+    ModelRateLimiter,
     TokenPricing,
     calculator_tool,
 )
@@ -159,6 +161,30 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(totals["total_tokens"], 1_650_000)
         self.assertAlmostEqual(totals["estimated_cost"], 2.0725)
         self.assertEqual(totals["currency"], "CNY")
+
+    def test_rate_limiter_emits_wait_before_model_call(self) -> None:
+        limiter = ModelRateLimiter(2, 1, clock=lambda: 0)
+        limiter.reserve()
+        model = ScriptedModel(
+            [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ok"}],
+                }
+            ]
+        )
+        agent = Agent(model, rate_limiter=limiter)
+
+        with patch("from_scratch_agent.agent.time.sleep") as sleep:
+            events = list(agent.run("hello"))
+
+        wait_event = next(
+            event
+            for event in events
+            if event["type"] == "rate_limit_wait"
+        )
+        self.assertEqual(wait_event["delay_seconds"], 0.5)
+        sleep.assert_called_once_with(0.5)
 
 
 if __name__ == "__main__":

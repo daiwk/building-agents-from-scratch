@@ -11,6 +11,7 @@ from .budget import (
 from .memory import InMemoryConversationStore, JsonFileConversationStore
 from .minimax import MiniMaxProvider
 from .registry import ToolRegistry, create_builtin_tool_registry
+from .rate_limit import ModelRateLimiter
 from .reliability import (
     ModelCallPolicy,
     ModelTimeoutError,
@@ -32,6 +33,7 @@ __all__ = [
     "ModelCallPolicy",
     "ModelTimeoutError",
     "ModelProvider",
+    "ModelRateLimiter",
     "RetryableModelError",
     "Skill",
     "SkillCatalog",

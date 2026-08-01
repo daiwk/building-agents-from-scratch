@@ -246,6 +246,22 @@ function handleAgentEvent(event) {
     return;
   }
 
+  if (event.type === "rateLimitWait") {
+    const seconds = (event.delayMs / 1000).toFixed(1);
+    setActivity(
+      "running",
+      `触发模型限流 · 等待 ${seconds} 秒`,
+      "这是主动节流，不是页面卡住；等待结束后会自动继续",
+    );
+    addTraceEvent(
+      "model",
+      "RATE LIMIT",
+      `等待 ${seconds} 秒`,
+      "达到配置的平均请求速率，暂缓下一次模型调用",
+    );
+    return;
+  }
+
   if (event.type === "usage") {
     const cost =
       event.totals.estimatedCost === undefined

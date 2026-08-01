@@ -39,6 +39,11 @@ try {
             `  ↳ result ${event.result.isError ? "error: " : ""}${event.result.content}`,
           );
         }
+        if (event.type === "rateLimitWait") {
+          console.log(
+            `  ↳ rate limit · waiting ${(event.delayMs / 1000).toFixed(1)}s`,
+          );
+        }
         if (event.type === "text") console.log(`agent> ${event.text}\n`);
         if (event.type === "textDelta") {
           if (!receivedTextDelta) stdout.write("agent> ");

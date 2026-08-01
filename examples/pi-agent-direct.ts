@@ -21,6 +21,8 @@ import {
   BudgetExceededError,
   BudgetTracker,
   createBudgetFromEnvironment,
+  createRateLimiterFromEnvironment,
+  waitForRateLimit,
 } from "../src/core/index.js";
 import {
   SkillCatalog,
@@ -175,6 +177,7 @@ export async function createPiAgent(): Promise<PiAgent> {
   );
   const budgetOptions = createBudgetFromEnvironment();
   let budget = new BudgetTracker(budgetOptions);
+  const rateLimiter = createRateLimiterFromEnvironment();
 
   const agent = new PiAgent({
     initialState: {
@@ -187,13 +190,21 @@ export async function createPiAgent(): Promise<PiAgent> {
       messages: savedMessages,
     },
     // pi-ai 原生支持 timeout/maxRetries，不需要在成熟库外再写一套重试循环。
-    streamFn: (selectedModel, context, options) =>
-      models.streamSimple(selectedModel, context, {
+    streamFn: async (selectedModel, context, options) => {
+      const delayMs = rateLimiter?.reserve() ?? 0;
+      if (delayMs > 0) {
+        console.log(
+          `\n[rate limit] waiting ${(delayMs / 1000).toFixed(1)}s`,
+        );
+        await waitForRateLimit(delayMs, options?.signal);
+      }
+      return models.streamSimple(selectedModel, context, {
         ...options,
         timeoutMs,
         maxRetries,
         maxRetryDelayMs,
-      }),
+      });
+    },
     sessionId,
     maxRetryDelayMs,
     toolExecution: "sequential",

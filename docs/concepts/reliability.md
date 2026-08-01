@@ -83,6 +83,25 @@ AGENT_MODEL_MAX_RETRIES=1
 AGENT_RETRY_DELAY_MS=500
 ```
 
+## 模型请求限流
+
+`ModelRateLimiter` 把“一个窗口最多 N 次”换算成均匀间隔。例如 60 次/分钟会平滑为
+约每秒启动一次模型请求，避免固定窗口在边界处突然放出一批请求：
+
+```dotenv
+AGENT_RATE_LIMIT_MAX_REQUESTS=60
+AGENT_RATE_LIMIT_WINDOW_MS=60000
+```
+
+Limiter 由 `Agent` 持有，而不是每次 `run()` 新建，因此连续任务也不能通过重置计数绕过
+限制。等待前会产生 `rateLimitWait` 事件，CLI 和 Web UI 都会明确显示等待时间；用户取消
+时，TypeScript 版会立即结束等待。from-scratch TypeScript/Python 版的自动 retry 也共用
+同一个 limiter，指数退避较长时通常无需额外等待。
+
+!!! note "这是进程内的平滑限流"
+    多进程、多机器或多个 API Key 共享额度时，应把预留状态放到 Redis/网关等集中层。
+    pi-agent 示例能限制每个 Agent turn；pi-ai 内部 retry 仍由其原生退避策略管理。
+
 ### Streaming 的重试边界
 
 `streamModelWithPolicy()` 在第一个 delta 发给 UI 之前仍可重试临时故障。一旦已经发出
@@ -137,4 +156,4 @@ AGENT_MAX_TOTAL_TOKENS=120000
 ## 为什么独立成模块
 
 `agent-loop.ts` 仍然只负责“模型 → 工具 → 模型”的控制流。参数校验和模型调用策略可以
-单独测试、替换和继续扩展，后续加入限流、熔断时不需要重写 Agent loop。
+单独测试、替换和继续扩展，后续加入熔断时不需要重写 Agent loop。

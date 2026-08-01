@@ -35,6 +35,11 @@ def main() -> None:
                         f"{totals['estimated_cost']:.6f}"
                     )
                 print(f"  usage> {totals['total_tokens']} tokens{cost}")
+            elif event["type"] == "rate_limit_wait":
+                print(
+                    "  rate limit> waiting "
+                    f"{event['delay_seconds']:.1f}s"
+                )
 
 
 if __name__ == "__main__":

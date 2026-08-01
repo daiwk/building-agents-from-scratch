@@ -50,10 +50,15 @@ AGENT_SKILLS=tool-first
 AGENT_MODEL_TIMEOUT_MS=120000
 AGENT_MODEL_MAX_RETRIES=1
 AGENT_MAX_RETRY_DELAY_MS=8000
+AGENT_RATE_LIMIT_MAX_REQUESTS=60
+AGENT_RATE_LIMIT_WINDOW_MS=60000
 ```
 
 这使用成熟库原生的 provider timeout/retry，而不是在 pi-agent 外再复制一遍
 from-scratch 重试循环。
+
+示例在 pi-agent 的 `streamFn` 入口复用 `ModelRateLimiter`，所以不同 turn 和多次
+`prompt()` 会共享同一个平滑请求速率。pi-ai 内部 retry 仍使用它自己的退避策略。
 
 ## Token / 成本预算
 
@@ -75,6 +80,7 @@ pi-ai 自身也会计算 provider cost，但本示例的成本上限只采用你
 | 一个 MiniMax provider | pi-ai 的 provider 与 model registry |
 | 自己实现 Schema 子集 | TypeBox + pi-agent 原生校验 |
 | 自己实现模型重试循环 | pi-ai provider 原生 timeout/retry |
+| 共用平滑限流器 | 在 `streamFn` 入口限制每个 turn |
 | 共用 `BudgetTracker` | 原生 usage + 生命周期事件驱动预算 |
 
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改

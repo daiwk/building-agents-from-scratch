@@ -55,6 +55,16 @@ AGENT_SKILLS=auto
 `RecentContextBuilder` 使用字符数近似 token 数并保留完整轮次。`AGENT_SKILLS=auto`
 使用确定性关键词匹配，适合学习和小型 skill 集合，不等同于语义检索。
 
+## 配置模型请求速率
+
+```dotenv
+AGENT_RATE_LIMIT_MAX_REQUESTS=60
+AGENT_RATE_LIMIT_WINDOW_MS=60000
+```
+
+这会平滑为约每秒一次请求，状态在同一个 `Agent` 的多次 `run()` 间共享。CLI/Web 收到
+`rateLimitWait` 后会显示具体等待时间，取消请求也能中止等待。
+
 ## 配置一次任务的预算
 
 ```dotenv

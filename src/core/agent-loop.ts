@@ -18,6 +18,7 @@ import {
   BudgetTracker,
   BudgetUsageUnavailableError,
 } from "./budget.js";
+import { ModelRateLimiter, waitForRateLimit } from "./rate-limit.js";
 
 export type AgentLoopOptions = {
   // 最多允许调用模型多少次，防止模型和工具无限互相调用。
@@ -32,6 +33,8 @@ export type AgentLoopOptions = {
   contextBuilder?: ContextBuilder;
   // budget 每次 agentLoop() 独立累计，防止一次任务无限消耗 token/成本。
   budget?: AgentBudget;
+  // limiter 由 Agent 持有并跨 run 复用；agentLoop 只负责在模型调用前等待。
+  rateLimiter?: ModelRateLimiter;
 };
 
 export type AgentHooks = {
@@ -75,6 +78,11 @@ export async function* agentLoop(
     // usage 只能在上一次响应结束后得到，因此预算在启动下一次模型调用前拦截。
     budget.assertCanStartModelCall();
     yield { type: "turnStart", turn };
+    const rateLimitDelayMs = options.rateLimiter?.reserve() ?? 0;
+    if (rateLimitDelayMs > 0) {
+      yield { type: "rateLimitWait", delayMs: rateLimitDelayMs };
+      await waitForRateLimit(rateLimitDelayMs, options.signal);
+    }
     // `?.` 称为可选链：hook 存在才调用，不存在就跳过。
     await options.hooks?.beforeModel?.(context);
 
@@ -95,6 +103,7 @@ export async function* agentLoop(
         model,
         modelRequest,
         options.modelCall,
+        options.rateLimiter,
       );
       while (true) {
         const next = await stream.next();
@@ -109,6 +118,7 @@ export async function* agentLoop(
         model,
         modelRequest,
         options.modelCall,
+        options.rateLimiter,
       );
     }
     // 模型消息必须先进入历史，下一轮模型才知道自己刚才请求了什么工具。

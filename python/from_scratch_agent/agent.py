@@ -4,11 +4,13 @@
 “模型 → 工具 → 结果 → 模型”反馈环。
 """
 
+import time
 from collections.abc import Iterator
 from typing import Any
 
 from .budget import AgentBudget, BudgetTracker, BudgetUsageUnavailableError
 from .memory import ConversationStore
+from .rate_limit import ModelRateLimiter
 from .reliability import ModelCallPolicy, call_with_policy
 from .types import AgentContext, Event, Message, ModelProvider, Tool
 from .validation import validate_tool_input
@@ -20,6 +22,7 @@ def agent_loop(
     max_turns: int = 8,
     model_policy: ModelCallPolicy | None = None,
     budget: AgentBudget | None = None,
+    rate_limiter: ModelRateLimiter | None = None,
 ) -> Iterator[Event]:
     """运行 Agent，并逐个产生可观察事件。
 
@@ -35,6 +38,14 @@ def agent_loop(
         # usage 在上一轮响应结束后才可得，所以在下一次模型调用前检查。
         tracker.assert_can_start_model_call()
         yield {"type": "turn_start", "turn": turn}
+        delay_seconds = rate_limiter.reserve() if rate_limiter else 0
+        if delay_seconds > 0:
+            yield {
+                "type": "rate_limit_wait",
+                "delay_seconds": delay_seconds,
+            }
+            # 同步教学版没有 AbortSignal；等待行为保持显式，便于替换为 asyncio.sleep。
+            time.sleep(delay_seconds)
 
         # 模型只看见结构化的上下文，不会直接执行 Python 函数。
         policy = model_policy or ModelCallPolicy()
@@ -45,6 +56,7 @@ def agent_loop(
                 context.tools,
             ),
             policy,
+            rate_limiter,
         )
         context.messages.append(assistant)
         usage = assistant.get("usage")
@@ -136,6 +148,7 @@ class Agent:
         memory_store: ConversationStore | None = None,
         session_id: str = "default",
         budget: AgentBudget | None = None,
+        rate_limiter: ModelRateLimiter | None = None,
     ) -> None:
         self.model = model
         self.max_turns = max_turns
@@ -143,6 +156,7 @@ class Agent:
         self.memory_store = memory_store
         self.session_id = session_id
         self.budget = budget
+        self.rate_limiter = rate_limiter
         self._memory_loaded = False
         self.context = AgentContext(
             system_prompt=system_prompt,
@@ -161,6 +175,7 @@ class Agent:
                 self.max_turns,
                 self.model_policy,
                 self.budget,
+                self.rate_limiter,
             )
         finally:
             if self.memory_store:
