@@ -10,7 +10,7 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 3. `tools.py`：计算器和时间工具；
 4. `minimax.py`：国内 MiniMax 协议适配；
 5. `registry.py`：按名称加载工具；
-6. `memory.py`：内存与 JSON ConversationStore；
+6. `memory.py`：内存、JSON 与 SQLite ConversationStore；
 7. `skills.py`：读取、选择和注入 SKILL.md；
 8. `reliability.py`：timeout、retry 和指数退避；
 9. `budget.py`：单次任务的 token / 成本软预算；
@@ -38,7 +38,7 @@ Python CLI 与 TypeScript CLI 使用相同环境变量：
 ```dotenv
 AGENT_TOOLS=calculator,current_time
 AGENT_TOOL_EXECUTION=sequential
-AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
 AGENT_SESSION_ID=python-cli
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
@@ -52,8 +52,10 @@ AGENT_MAX_TOTAL_TOKENS=120000
 AGENT_TRACE_FILE=.agent-data/traces.jsonl
 ```
 
-不设置 `AGENT_MEMORY_FILE` 时仍是纯内存对话；不设置 `AGENT_SKILLS` 时不会加载任何
-skill。工具参数会在执行前通过与 TypeScript 版相同的 JSON Schema 子集校验。
+需要可直接阅读的文件时，可改用 `AGENT_MEMORY_FILE=.agent-data/conversations.json`；
+JSON 与 SQLite 只能选择一个，都不设置时仍是纯内存对话。Python SQLite 版只使用标准库
+`sqlite3`，表结构与 TypeScript 版一致。不设置 `AGENT_SKILLS` 时不会加载任何 skill。
+工具参数会在执行前通过与 TypeScript 版相同的 JSON Schema 子集校验。
 
 Python 无法安全地强制终止任意同步函数，因此教学版 timeout 使用 daemon worker 停止
 外层等待，同时 MiniMax provider 自身也设置 socket timeout。生产级异步服务建议改用

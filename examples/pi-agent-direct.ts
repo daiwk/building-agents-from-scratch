@@ -16,7 +16,10 @@ import {
 } from "@earendil-works/pi-agent-core";
 import { createModels, Type } from "@earendil-works/pi-ai";
 import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
-import { JsonFileConversationStore } from "../src/memory/index.js";
+import {
+  JsonFileConversationStore,
+  SqliteConversationStore,
+} from "../src/memory/index.js";
 import {
   BudgetExceededError,
   BudgetTracker,
@@ -155,11 +158,29 @@ export async function createPiAgent(): Promise<PiAgent> {
     process.env.PI_AGENT_SESSION_ID ??
     process.env.AGENT_SESSION_ID ??
     "pi-cli";
-  const memoryFile =
-    process.env.PI_AGENT_MEMORY_FILE ?? process.env.AGENT_MEMORY_FILE;
-  const memoryStore = memoryFile
-    ? new JsonFileConversationStore<PiAgentMessage>(memoryFile)
-    : undefined;
+  const hasPiMemoryOverride =
+    process.env.PI_AGENT_MEMORY_FILE !== undefined ||
+    process.env.PI_AGENT_MEMORY_DATABASE !== undefined;
+  const memoryFile = (
+    hasPiMemoryOverride
+      ? process.env.PI_AGENT_MEMORY_FILE
+      : process.env.AGENT_MEMORY_FILE
+  )?.trim();
+  const memoryDatabase = (
+    hasPiMemoryOverride
+      ? process.env.PI_AGENT_MEMORY_DATABASE
+      : process.env.AGENT_MEMORY_DATABASE
+  )?.trim();
+  if (memoryFile && memoryDatabase) {
+    throw new Error(
+      "Configure only one JSON or SQLite memory path for pi-agent.",
+    );
+  }
+  const memoryStore = memoryDatabase
+    ? new SqliteConversationStore<PiAgentMessage>(memoryDatabase)
+    : memoryFile
+      ? new JsonFileConversationStore<PiAgentMessage>(memoryFile)
+      : undefined;
   const savedMessages = memoryStore
     ? await memoryStore.load(sessionId)
     : [];

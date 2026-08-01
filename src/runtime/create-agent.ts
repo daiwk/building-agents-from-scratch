@@ -8,11 +8,15 @@ import {
   createRateLimiterFromEnvironment,
   createTracerFromEnvironment,
   type AgentHooks,
+  type ConversationStore,
   type ContextBuilder,
   type ModelProvider,
   type ToolExecutionMode,
 } from "../core/index.js";
-import { JsonFileConversationStore } from "../memory/index.js";
+import {
+  JsonFileConversationStore,
+  SqliteConversationStore,
+} from "../memory/index.js";
 import { CodexCliProvider, MiniMaxProvider } from "../providers/index.js";
 import {
   SkillCatalog,
@@ -22,8 +26,8 @@ import {
 } from "../skills/index.js";
 import { createBuiltinToolRegistry } from "../tools/index.js";
 
-// 同一个文件只创建一个 store 实例，保证 Web 多会话写入经过同一条队列。
-const memoryStores = new Map<string, JsonFileConversationStore>();
+// 同一个后端文件只创建一个 store 实例，供 CLI/Web 的多个会话复用连接或写入队列。
+const memoryStores = new Map<string, ConversationStore>();
 
 // CLI 和 Web 共用这个“装配层”，避免两个界面各自创建一套 Agent。
 export function loadLocalEnv(): void {
@@ -43,6 +47,12 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
     "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。";
   const skillConfiguration = configureSkills(basePrompt);
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
+  const memoryDatabase = process.env.AGENT_MEMORY_DATABASE?.trim();
+  if (memoryFile && memoryDatabase) {
+    throw new Error(
+      "Set only one of AGENT_MEMORY_FILE or AGENT_MEMORY_DATABASE.",
+    );
+  }
   const contextBuilder = createContextBuilderFromEnv();
   const budget = createBudgetFromEnvironment();
   const rateLimiter = createRateLimiterFromEnvironment();
@@ -75,11 +85,14 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),
       retryDelayMs: readNonNegativeNumber("AGENT_RETRY_DELAY_MS", 500),
     },
-    ...(memoryFile
+    ...(memoryFile || memoryDatabase
       ? {
           memory: {
             sessionId,
-            store: getMemoryStore(memoryFile),
+            store: getMemoryStore(
+              memoryDatabase ?? memoryFile ?? "",
+              memoryDatabase ? "sqlite" : "json",
+            ),
           },
         }
       : {}),
@@ -204,12 +217,18 @@ function readPositiveInteger(name: string, fallback: number): number {
   return value;
 }
 
-function getMemoryStore(filePath: string): JsonFileConversationStore {
+function getMemoryStore(
+  filePath: string,
+  backend: "json" | "sqlite",
+): ConversationStore {
   const absolutePath = resolve(filePath);
-  let store = memoryStores.get(absolutePath);
+  const key = `${backend}:${absolutePath}`;
+  let store = memoryStores.get(key);
   if (!store) {
-    store = new JsonFileConversationStore(absolutePath);
-    memoryStores.set(absolutePath, store);
+    store = backend === "sqlite"
+      ? new SqliteConversationStore(absolutePath)
+      : new JsonFileConversationStore(absolutePath);
+    memoryStores.set(key, store);
   }
   return store;
 }

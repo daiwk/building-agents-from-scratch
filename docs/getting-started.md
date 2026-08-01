@@ -57,12 +57,14 @@ AGENT_PROVIDER=minimax
 
 ```dotenv
 AGENT_TOOLS=calculator,current_time
-AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
 ```
 
-不设置 `AGENT_MEMORY_FILE` 时仍保持原来的纯内存行为。
+SQLite 适合持续使用；想直接查看完整 JSON 时也可以改用
+`AGENT_MEMORY_FILE=.agent-data/conversations.json`，两者只能选一个。都不设置时仍保持
+原来的纯内存行为。
 
 !!! warning "国内站与国际站不能混用"
     本项目默认使用国内站 `api.minimaxi.com`。国内站 Key 不应发送到

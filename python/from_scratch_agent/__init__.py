@@ -8,7 +8,11 @@ from .budget import (
     BudgetUsageUnavailableError,
     TokenPricing,
 )
-from .memory import InMemoryConversationStore, JsonFileConversationStore
+from .memory import (
+    InMemoryConversationStore,
+    JsonFileConversationStore,
+    SqliteConversationStore,
+)
 from .minimax import MiniMaxProvider
 from .registry import ToolRegistry, create_builtin_tool_registry
 from .rate_limit import ModelRateLimiter
@@ -57,6 +61,7 @@ __all__ = [
     "current_time_tool",
     "InMemoryConversationStore",
     "JsonFileConversationStore",
+    "SqliteConversationStore",
     "load_skills_from_directory",
     "load_local_env",
 ]

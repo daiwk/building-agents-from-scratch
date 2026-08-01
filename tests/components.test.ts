@@ -7,7 +7,10 @@ import {
   InMemoryConversationStore,
   type ModelProvider,
 } from "../src/core/index.js";
-import { JsonFileConversationStore } from "../src/memory/index.js";
+import {
+  JsonFileConversationStore,
+  SqliteConversationStore,
+} from "../src/memory/index.js";
 import {
   SkillCatalog,
   applySkillsToSystemPrompt,
@@ -103,6 +106,35 @@ describe("ConversationStore", () => {
       version: number;
     };
     expect(raw.version).toBe(1);
+  });
+
+  it("isolates, replaces, and clears sessions in SQLite", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-memory-sqlite-"));
+    temporaryDirectories.push(directory);
+    const databasePath = join(directory, "conversations.sqlite3");
+    const firstStore = new SqliteConversationStore(databasePath);
+    await firstStore.save("web-1", [
+      { role: "user", content: "第一版" },
+    ]);
+    await firstStore.save("web-2", [
+      { role: "user", content: "另一个会话" },
+    ]);
+    await firstStore.save("web-1", [
+      { role: "user", content: "覆盖后" },
+    ]);
+    firstStore.close();
+
+    const secondStore = new SqliteConversationStore(databasePath);
+    expect(await secondStore.load("web-1")).toEqual([
+      { role: "user", content: "覆盖后" },
+    ]);
+    expect(await secondStore.load("web-2")).toEqual([
+      { role: "user", content: "另一个会话" },
+    ]);
+    await secondStore.clear("web-1");
+    expect(await secondStore.load("web-1")).toEqual([]);
+    expect(await secondStore.load("web-2")).toHaveLength(1);
+    secondStore.close();
   });
 });
 

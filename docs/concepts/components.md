@@ -59,7 +59,7 @@ type ConversationStore = {
 };
 ```
 
-项目提供两种实现：
+项目提供三种实现：
 
 ### InMemoryConversationStore
 
@@ -80,8 +80,21 @@ AGENT_SESSION_ID=my-learning-session
 ```
 
 JSON 写入使用临时文件加 rename，并将文件权限设置为 `0600`。它只保证同一 store 实例
-内的写入排队，不适合多个 Node 进程共享。生产环境应实现同一个接口并换成
-SQLite/PostgreSQL。
+内的写入排队，不适合多个 Node 进程共享。
+
+### SqliteConversationStore
+
+适合需要多个 session、进程重启恢复或多个进程协调写入的本地应用：
+
+```dotenv
+AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
+```
+
+`AGENT_MEMORY_FILE` 和 `AGENT_MEMORY_DATABASE` 只能选择一个。SQLite 每个 session
+保存一行 JSON message 数组，用事务完成覆盖与清除，并等待短暂写锁；TypeScript 使用
+Node.js 内置 `node:sqlite`，Python 使用标准库 `sqlite3`，表结构一致且都不增加依赖。
+数据库仍是明文，请像对待聊天记录一样限制文件访问和备份范围。需要远程服务、高可用或
+细粒度查询时，再实现同一接口接 PostgreSQL，而不是修改 Agent loop。
 
 ## 构建本轮 Context
 
@@ -191,7 +204,7 @@ budget 和并行 scheduler 仍留在后续阶段。
 ## 下一步扩展点
 
 - ToolRegistry：工具权限、租户策略、lazy loader；
-- ConversationStore：SQLite、加密、TTL；
+- ConversationStore：加密、TTL、PostgreSQL；
 - ContextBuilder：精确 token budget、摘要、检索结果排序；
 - SkillCatalog：语义路由、依赖检查和版本信息；
 - agentAsTool：结构化 handoff、深度预算和并行 scheduler。
@@ -202,7 +215,7 @@ budget 和并行 scheduler 仍留在后续阶段。
 |---|---|---|---|
 | 工具加载 | `ToolRegistry` | `ToolRegistry` | `PiToolRegistry` + `AgentTool` |
 | 参数校验 | 教学 JSON Schema 子集 | 同一 Schema 子集 | pi-agent/TypeBox 原生校验 |
-| 会话 memory | `JsonFileConversationStore` | `JsonFileConversationStore` | 通用 JSON store + pi messages |
+| 会话 memory | JSON / `SqliteConversationStore` | JSON / `SqliteConversationStore` | 通用 JSON/SQLite store + pi messages |
 | Skill | `SkillCatalog` | Python `SkillCatalog` | 复用 TypeScript loader/catalog |
 | Timeout/retry | `ModelCallPolicy` | Python `ModelCallPolicy` | pi-ai 原生 stream options |
 | 最近轮次 Context | `RecentContextBuilder` | 待对齐 | 使用 pi-agent 原生 context |
