@@ -125,5 +125,10 @@ Stage 13 可以通过 `AGENT_KNOWLEDGE_FILE=knowledge.json` 加载带 id、title
 `promptPiAgentWithArtifacts()` 会把同一个 ArtifactStore 中的图片适配为 pi-ai 原生
 `ImageContent`，文本文件则作为有明确边界的文字输入。
 
+Stage 15 通过 `PI_AGENT_ROLE`、`PI_AGENT_TENANT_ID`、`PI_AGENT_SUBJECT` 为直接调用版提供
+Principal。选中的 tool、动态 Skill 和 workspace 会经过同一个 RBAC；设置这些身份变量后，
+memory session 也会自动按 tenant 做 SHA-256 命名空间隔离。MiniMax Key 支持
+`MINIMAX_API_KEY_FILE`，Agent/tool 生命周期事件会写入同一个 tenant-scoped audit sink。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

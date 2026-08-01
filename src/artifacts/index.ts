@@ -6,7 +6,7 @@ export const ALLOWED_ARTIFACT_TYPES = new Set([
 ]);
 
 export type Artifact = {
-  id: string; name: string; mimeType: string; size: number;
+  id: string; tenantId: string; name: string; mimeType: string; size: number;
   sha256: string; data: Buffer; createdAt: string;
 };
 
@@ -16,11 +16,12 @@ export class InMemoryArtifactStore {
 
   constructor(private readonly maxBytes = 2 * 1024 * 1024) {}
 
-  create(name: string, mimeType: string, data: Buffer): Artifact {
+  create(tenantId: string, name: string, mimeType: string, data: Buffer): Artifact {
+    if (!/^[\w.-]{1,120}$/.test(tenantId)) throw new Error("Invalid tenant id.");
     if (!ALLOWED_ARTIFACT_TYPES.has(mimeType)) throw new Error("Unsupported artifact type.");
     if (!data.length || data.length > this.maxBytes) throw new Error("Artifact size is invalid.");
     const artifact = {
-      id: randomUUID(), name: name.replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "file",
+      id: randomUUID(), tenantId, name: name.replace(/[^\p{L}\p{N}._ -]/gu, "_").slice(0, 120) || "file",
       mimeType, size: data.length, sha256: createHash("sha256").update(data).digest("hex"),
       data: Buffer.from(data), createdAt: new Date().toISOString(),
     };
@@ -28,9 +29,12 @@ export class InMemoryArtifactStore {
     return artifact;
   }
 
-  get(id: string): Artifact | undefined { return this.artifacts.get(id); }
+  get(tenantId: string, id: string): Artifact | undefined {
+    const artifact = this.artifacts.get(id);
+    return artifact?.tenantId === tenantId ? artifact : undefined;
+  }
   metadata(artifact: Artifact) {
-    const { data: _data, ...metadata } = artifact;
+    const { data: _data, tenantId: _tenantId, ...metadata } = artifact;
     return metadata;
   }
 }

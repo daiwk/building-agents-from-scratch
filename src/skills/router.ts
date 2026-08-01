@@ -11,6 +11,7 @@ export type DynamicSkillHookOptions = {
   catalog: SkillCatalog;
   maxSkills?: number;
   minScore?: number;
+  authorizeSkill?: (name: string) => void;
   router?: SkillRouter;
   allowedToolNames?: string[];
 };
@@ -42,6 +43,7 @@ export function createDynamicSkillHook(
       if (options.allowedToolNames) {
         assertSkillToolsAvailable(skills, options.allowedToolNames);
       }
+      for (const skill of skills) options.authorizeSkill?.(skill.name);
       context.systemPrompt = applySkillsToSystemPrompt(
         options.basePrompt,
         skills,

@@ -7,6 +7,7 @@ import {
   type ModelProvider,
 } from "../src/core/index.js";
 import { createWebServer } from "../src/web/server.js";
+import { scopeTenantSessionId } from "../src/security/index.js";
 
 const servers: Server[] = [];
 
@@ -137,7 +138,8 @@ describe("web server", () => {
       body: JSON.stringify({ message: "记住我", sessionId: "browser-1" }),
     });
     await chat.text();
-    expect(await store.load("browser-1")).toHaveLength(2);
+    const scopedId = scopeTenantSessionId("local", "browser-1");
+    expect(await store.load(scopedId)).toHaveLength(2);
 
     const reset = await fetch(`${baseUrl}/api/reset`, {
       method: "POST",
@@ -145,7 +147,7 @@ describe("web server", () => {
       body: JSON.stringify({ sessionId: "browser-1" }),
     });
     expect(reset.status).toBe(200);
-    expect(await store.load("browser-1")).toEqual([]);
+    expect(await store.load(scopedId)).toEqual([]);
   });
 });
 

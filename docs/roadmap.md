@@ -255,11 +255,19 @@ provider 后才启用混合排名。引用来自摄取时保存的 metadata，�
 教学版使用进程内 ArtifactStore，服务重启后文件会消失；生产环境应换成对象存储、病毒扫描、
 租户级配额和带过期时间的下载 URL。上传内容永远不会作为脚本执行。
 
-## Stage 15（下一阶段）
+## Stage 15：认证、安全与部署（已完成）
 
-- 认证与租户隔离；
-- RBAC 与 tool/skill/resource 级授权；
-- 密钥管理、审计日志与部署模板。
+- ~~hashed Bearer API Key 认证与 constant-time 比较~~；
+- ~~Conversation、Artifact 和 audit 的租户隔离~~；
+- ~~user/builder/auditor/admin RBAC~~；
+- ~~tool、skill、resource 在 Agent 装配层授权~~；
+- ~~ENV / `*_FILE` secret provider~~；
+- ~~不记录 prompt、文件内容和 Key 的 tenant-scoped audit~~；
+- ~~非 root、只读文件系统、Docker secrets/configs 的 Compose 模板~~；
+- ~~TypeScript、Python 和 pi-agent 对照实现~~。
+
+本地未配置认证文件时仍保持一键运行，但只绑定 `127.0.0.1`；Compose 模板会强制加载认证
+配置。教学版 hashed API Key 不替代企业 OIDC/KMS/策略引擎，生产边界详见安全与部署章节。
 
 ## Stage 16–18（远期）
 

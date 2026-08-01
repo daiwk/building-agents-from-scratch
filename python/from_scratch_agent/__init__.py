@@ -86,6 +86,21 @@ from .tracing import JsonlTraceExporter, Span, SpanRecord, Tracer
 from .types import ModelProvider, Tool
 from .retrieval import HybridRetriever, SourceDocument, create_knowledge_search_tool
 from .artifacts import Artifact, InMemoryArtifactStore as InMemoryUploadArtifactStore
+from .security import (
+    ApiKeyAuthenticator,
+    ApiKeyIdentity,
+    AuditEvent,
+    EnvironmentSecretProvider,
+    InMemoryAuditSink,
+    JsonlAuditSink,
+    Principal,
+    SecurityError,
+    authorize,
+    create_audit_sink_from_environment,
+    create_authenticator_from_environment,
+    hash_api_key,
+    scope_tenant_session_id,
+)
 from .workspace import (
     FileArtifact,
     InMemoryFileArtifactStore,
@@ -205,4 +220,17 @@ __all__ = [
     "create_knowledge_search_tool",
     "Artifact",
     "InMemoryUploadArtifactStore",
+    "ApiKeyAuthenticator",
+    "ApiKeyIdentity",
+    "AuditEvent",
+    "EnvironmentSecretProvider",
+    "InMemoryAuditSink",
+    "JsonlAuditSink",
+    "Principal",
+    "SecurityError",
+    "authorize",
+    "create_audit_sink_from_environment",
+    "create_authenticator_from_environment",
+    "hash_api_key",
+    "scope_tenant_session_id",
 ]

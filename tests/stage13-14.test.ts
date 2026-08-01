@@ -24,8 +24,8 @@ describe("Stage 13 retrieval", () => {
 describe("Stage 14 multimodal artifacts", () => {
   it("rejects executable content and hashes accepted artifacts", () => {
     const store = new InMemoryArtifactStore(20);
-    expect(() => store.create("bad.sh", "application/x-sh", Buffer.from("echo bad"))).toThrow("Unsupported");
-    expect(store.create("note.txt", "text/plain", Buffer.from("hello")).sha256).toHaveLength(64);
+    expect(() => store.create("test", "bad.sh", "application/x-sh", Buffer.from("echo bad"))).toThrow("Unsupported");
+    expect(store.create("test", "note.txt", "text/plain", Buffer.from("hello")).sha256).toHaveLength(64);
   });
 
   it("uploads an image and passes it to the model as a content block", async () => {

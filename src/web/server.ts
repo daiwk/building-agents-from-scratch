@@ -17,12 +17,25 @@ import {
   loadLocalEnv,
 } from "../runtime/create-agent.js";
 import { PLAYGROUND_DEMOS, runPlaygroundDemo } from "./playground.js";
+import {
+  SecurityError,
+  authorize,
+  createAuthenticatorFromEnvironment,
+  createAuditSinkFromEnvironment,
+  scopeTenantSessionId,
+  type AuditSink,
+  type Authenticator,
+  type Permission,
+  type Principal,
+} from "../security/index.js";
 
 type WebServerOptions = {
   // `?` 表示测试可以传入这些配置，正式运行时也可以全部省略。
-  createAgent?: (sessionId?: string) => Agent;
+  createAgent?: (sessionId?: string, principal?: Principal) => Agent;
   providerName?: string;
   webRoot?: string;
+  authenticator?: Authenticator;
+  audit?: AuditSink;
 };
 
 type ChatBody = {
@@ -47,11 +60,19 @@ export function createWebServer(options: WebServerOptions = {}): Server {
   const makeAgent = options.createAgent ?? createAgentFromEnv;
   const providerName = options.providerName ?? getProviderName();
   const webRoot = options.webRoot ?? resolve(process.cwd(), "web");
+  const authenticator = options.authenticator ?? createAuthenticatorFromEnvironment();
+  const audit = options.audit ?? createAuditSinkFromEnvironment();
 
   return createServer(async (request, response) => {
     setSecurityHeaders(response);
+    let principal: Principal | undefined;
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
+      const requirePermission = (permission: Permission): Principal => {
+        principal ??= authenticator.authenticate(request.headers.authorization);
+        authorize(principal, permission);
+        return principal;
+      };
 
       if (request.method === "GET" && url.pathname === "/api/health") {
         return sendJson(response, 200, { ok: true, provider: providerName });
@@ -64,7 +85,24 @@ export function createWebServer(options: WebServerOptions = {}): Server {
         const demo = typeof body.demo === "string" ? body.demo : "";
         return sendJson(response, 200, await runPlaygroundDemo(demo));
       }
+      if (request.method === "GET" && url.pathname === "/api/me") {
+        principal = authenticator.authenticate(request.headers.authorization);
+        return sendJson(response, 200, { principal });
+      }
+      if (request.method === "GET" && url.pathname === "/api/audit") {
+        const identity = requirePermission("audit:read");
+        const requestedLimit = Number(url.searchParams.get("limit") ?? 100);
+        const limit = Number.isInteger(requestedLimit) ? Math.min(200, Math.max(1, requestedLimit)) : 100;
+        const events = await audit.list(identity.tenantId, limit);
+        await audit.write({
+          tenantId: identity.tenantId, subject: identity.subject,
+          action: "audit.read", outcome: "success", resourceType: "audit",
+          metadata: { limit },
+        });
+        return sendJson(response, 200, { events });
+      }
       if (request.method === "POST" && url.pathname === "/api/artifacts") {
+        const identity = requirePermission("artifact:write");
         const body = await readJson(request, 3 * 1024 * 1024);
         if (typeof body.name !== "string" || typeof body.mimeType !== "string" ||
             typeof body.dataBase64 !== "string") {
@@ -74,13 +112,23 @@ export function createWebServer(options: WebServerOptions = {}): Server {
           return sendJson(response, 400, { error: "dataBase64 is invalid." });
         }
         const data = Buffer.from(body.dataBase64, "base64");
-        const artifact = artifacts.create(body.name, body.mimeType, data);
+        const artifact = artifacts.create(identity.tenantId, body.name, body.mimeType, data);
+        await audit.write({
+          tenantId: identity.tenantId, subject: identity.subject,
+          action: "artifact.create", outcome: "success", resourceType: "artifact",
+          resourceId: artifact.id, metadata: { mimeType: artifact.mimeType, size: artifact.size },
+        });
         return sendJson(response, 201, artifacts.metadata(artifact));
       }
       const artifactMatch = url.pathname.match(/^\/api\/artifacts\/([\w-]+)$/);
       if (request.method === "GET" && artifactMatch) {
-        const artifact = artifacts.get(artifactMatch[1]!);
+        const identity = requirePermission("artifact:read");
+        const artifact = artifacts.get(identity.tenantId, artifactMatch[1]!);
         if (!artifact) return sendJson(response, 404, { error: "Artifact not found." });
+        await audit.write({
+          tenantId: identity.tenantId, subject: identity.subject,
+          action: "artifact.read", outcome: "success", resourceType: "artifact", resourceId: artifact.id,
+        });
         response.writeHead(200, {
           "content-type": artifact.mimeType,
           "content-length": artifact.size,
@@ -90,6 +138,7 @@ export function createWebServer(options: WebServerOptions = {}): Server {
         return response.end(artifact.data);
       }
       if (request.method === "POST" && url.pathname === "/api/chat") {
+        const identity = requirePermission("chat:run");
         return await handleChat(
           request,
           response,
@@ -98,9 +147,12 @@ export function createWebServer(options: WebServerOptions = {}): Server {
           makeAgent,
           providerName,
           artifacts,
+          identity,
+          audit,
         );
       }
       if (request.method === "POST" && url.pathname === "/api/reset") {
+        const identity = requirePermission("session:reset");
         const body = await readJson(request);
         const sessionId =
           typeof body.sessionId === "string" ? body.sessionId : "";
@@ -109,9 +161,14 @@ export function createWebServer(options: WebServerOptions = {}): Server {
             return sendJson(response, 400, { error: "Invalid session id." });
           }
           // reset 不仅删除内存中的 Agent，也清除可选的持久化 memory。
-          const agent = sessions.get(sessionId) ?? makeAgent(sessionId);
+          const sessionKey = scopeTenantSessionId(identity.tenantId, sessionId);
+          const agent = sessions.get(sessionKey) ?? makeAgent(sessionKey, identity);
           await agent.reset();
-          sessions.delete(sessionId);
+          sessions.delete(sessionKey);
+          await audit.write({
+            tenantId: identity.tenantId, subject: identity.subject,
+            action: "session.reset", outcome: "success", resourceType: "session", resourceId: sessionId,
+          });
         }
         return sendJson(response, 200, { ok: true });
       }
@@ -121,7 +178,17 @@ export function createWebServer(options: WebServerOptions = {}): Server {
       sendJson(response, 404, { error: "Route not found." });
     } catch (error) {
       if (!response.headersSent) {
-        sendJson(response, 500, { error: toErrorMessage(error) });
+        if (principal) {
+          await audit.write({
+            tenantId: principal.tenantId, subject: principal.subject,
+            action: `${request.method ?? "UNKNOWN"} ${request.url ?? "/"}`,
+            outcome: error instanceof SecurityError ? "denied" : "failure",
+          });
+        }
+        if (error instanceof SecurityError) {
+          if (error.statusCode === 401) response.setHeader("www-authenticate", 'Bearer realm="agent"');
+          sendJson(response, error.statusCode, { error: error.message });
+        } else sendJson(response, 500, { error: toErrorMessage(error) });
       } else if (!response.writableEnded) {
         writeNdjson(response, { type: "error", message: toErrorMessage(error) });
         response.end();
@@ -135,9 +202,11 @@ async function handleChat(
   response: ServerResponse,
   sessions: Map<string, Agent>,
   activeSessions: Set<string>,
-  makeAgent: (sessionId?: string) => Agent,
+  makeAgent: (sessionId?: string, principal?: Principal) => Agent,
   providerName: string,
   artifacts: InMemoryArtifactStore,
+  principal: Principal,
+  audit: AuditSink,
 ): Promise<void> {
   const body = (await readJson(request)) as ChatBody;
   const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -145,12 +214,15 @@ async function handleChat(
     ? body.artifactIds.filter((id): id is string => typeof id === "string") : [];
   if (artifactIds.length > 4) return sendJson(response, 400, { error: "At most 4 artifacts are allowed." });
   if (!message && !artifactIds.length) return sendJson(response, 400, { error: "Message or artifact is required." });
+  const attachedArtifacts = artifactIds.map((id) => artifacts.get(principal.tenantId, id));
+  if (attachedArtifacts.some((artifact) => !artifact)) {
+    return sendJson(response, 404, { error: "Artifact not found." });
+  }
   const content: string | UserContentBlock[] = artifactIds.length
     ? [
         ...(message ? [{ type: "text" as const, text: message }] : []),
-        ...artifactIds.map((id): UserContentBlock => {
-          const artifact = artifacts.get(id);
-          if (!artifact) throw new Error(`Artifact not found: ${id}`);
+        ...attachedArtifacts.map((artifact): UserContentBlock => {
+          if (!artifact) throw new Error("Unreachable artifact validation state.");
           if (artifact.mimeType.startsWith("image/")) return {
             type: "image", source: { type: "base64", mediaType: artifact.mimeType, data: artifact.data.toString("base64") },
           };
@@ -165,20 +237,21 @@ async function handleChat(
   if (!/^[\w-]{1,80}$/.test(sessionId)) {
     return sendJson(response, 400, { error: "Invalid session id." });
   }
-  if (activeSessions.has(sessionId)) {
+  const sessionKey = scopeTenantSessionId(principal.tenantId, sessionId);
+  if (activeSessions.has(sessionKey)) {
     return sendJson(response, 409, {
       error: "This session is already processing a message.",
     });
   }
 
-  let agent = sessions.get(sessionId);
+  let agent = sessions.get(sessionKey);
   if (!agent) {
-    agent = makeAgent(sessionId);
+    agent = makeAgent(sessionKey, principal);
     if (sessions.size >= 100) {
       const oldest = sessions.keys().next().value as string | undefined;
       if (oldest) sessions.delete(oldest);
     }
-    sessions.set(sessionId, agent);
+    sessions.set(sessionKey, agent);
   }
 
   response.writeHead(200, {
@@ -188,7 +261,7 @@ async function handleChat(
     connection: "keep-alive",
     "x-accel-buffering": "no",
   });
-  activeSessions.add(sessionId);
+  activeSessions.add(sessionKey);
   const controller = new AbortController();
   // 用户停止请求或关闭页面时，把取消信号继续传给 Agent 和模型请求。
   request.once("aborted", () => controller.abort());
@@ -202,10 +275,20 @@ async function handleChat(
       if (event.type === "thinking" || event.type === "message") continue;
       writeNdjson(response, event);
     }
+    await audit.write({
+      tenantId: principal.tenantId, subject: principal.subject,
+      action: "chat.run", outcome: "success", resourceType: "session", resourceId: sessionId,
+      metadata: { artifactCount: artifactIds.length },
+    });
   } catch (error) {
+    await audit.write({
+      tenantId: principal.tenantId, subject: principal.subject,
+      action: "chat.run", outcome: "failure", resourceType: "session", resourceId: sessionId,
+      metadata: { errorType: error instanceof Error ? error.name : "unknown" },
+    });
     writeNdjson(response, { type: "error", message: toErrorMessage(error) });
   } finally {
-    activeSessions.delete(sessionId);
+    activeSessions.delete(sessionKey);
     response.end();
   }
 }
@@ -301,9 +384,18 @@ if (
 ) {
   loadLocalEnv();
   const port = Number(process.env.PORT ?? 3000);
+  const host = process.env.AGENT_HOST?.trim() || "127.0.0.1";
+  assertSafeBind(host, process.env.AGENT_AUTH_CONFIG);
   const server = createWebServer();
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`Agent Observatory: http://127.0.0.1:${port}`);
+  server.listen(port, host, () => {
+    console.log(`Agent Observatory listening on ${host}:${port}`);
     console.log(`provider=${getProviderName()}`);
   });
+}
+
+export function assertSafeBind(host: string, authConfig: string | undefined): void {
+  const loopback = new Set(["127.0.0.1", "localhost", "::1"]);
+  if (!loopback.has(host) && !authConfig?.trim()) {
+    throw new Error("Refusing a non-loopback bind without AGENT_AUTH_CONFIG.");
+  }
 }

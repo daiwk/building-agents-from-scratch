@@ -10,6 +10,7 @@ ALLOWED_TYPES = {"text/plain", "text/markdown", "application/json", "image/png",
 @dataclass(frozen=True)
 class Artifact:
     id: str
+    tenant_id: str
     name: str
     mime_type: str
     data: bytes
@@ -21,14 +22,17 @@ class InMemoryArtifactStore:
         self.max_bytes = max_bytes
         self._items: dict[str, Artifact] = {}
 
-    def create(self, name: str, mime_type: str, data: bytes) -> Artifact:
+    def create(self, tenant_id: str, name: str, mime_type: str, data: bytes) -> Artifact:
         if mime_type not in ALLOWED_TYPES:
             raise ValueError("Unsupported artifact type")
         if not data or len(data) > self.max_bytes:
             raise ValueError("Artifact size is invalid")
-        artifact = Artifact(str(uuid.uuid4()), name[:120], mime_type, bytes(data), hashlib.sha256(data).hexdigest())
+        if not tenant_id or len(tenant_id) > 120:
+            raise ValueError("Invalid tenant id")
+        artifact = Artifact(str(uuid.uuid4()), tenant_id, name[:120], mime_type, bytes(data), hashlib.sha256(data).hexdigest())
         self._items[artifact.id] = artifact
         return artifact
 
-    def get(self, artifact_id: str) -> Artifact | None:
-        return self._items.get(artifact_id)
+    def get(self, tenant_id: str, artifact_id: str) -> Artifact | None:
+        artifact = self._items.get(artifact_id)
+        return artifact if artifact and artifact.tenant_id == tenant_id else None
