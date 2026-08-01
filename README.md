@@ -168,7 +168,8 @@ src/
 │   ├── types.ts          # 消息、工具、模型、事件协议
 │   ├── agent-loop.ts     # 唯一的控制循环
 │   ├── agent.ts          # 有状态 Agent
-│   └── context-builder.ts # 本轮模型上下文裁剪
+│   ├── context-builder.ts # 本轮模型上下文裁剪
+│   └── budget.ts          # 单次任务的 token / 成本预算
 ├── runtime/
 │   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
@@ -203,9 +204,10 @@ docs/                     # MkDocs 使用说明
 mkdocs.yml
 ```
 
-Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.md 和模型调用可靠性
-配置。三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
-覆盖。详见文档站的“三种实现”章节。
+Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.md、模型调用可靠性
+和单次任务预算。
+三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
+覆盖工具、记忆和技能配置。详见文档站的“三种实现”章节。
 
 ## 设计原则
 
@@ -220,6 +222,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
 - 输出可流式：MiniMax SSE 的文本与工具参数 delta 会实时进入 CLI/Web UI。
+- 资源可观察：每个模型响应报告累计 usage，可按自定义币种与单价设置 soft budget。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
 - 高级能力外置：memory、skills、观测和策略通过 hooks 或 context 变换实现。
 - 默认安全：本机 CLI 后端使用只读 sandbox；示例工具不执行 shell、不写文件。
@@ -231,7 +234,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 
 推荐迭代顺序：
 
-1. 限流、token/cost budget、并行工具与 OpenTelemetry trace；
+1. 限流、并行工具与 OpenTelemetry-compatible trace；
 2. SQLite、精确 token budget、摘要与 MemoryIndex；
 3. skill 语义路由、依赖检查与版本信息；
 4. sub-agent 的结构化 handoff、深度与 token/time budget；

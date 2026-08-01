@@ -1,6 +1,6 @@
 # 可靠性模块
 
-最小 Agent loop 让流程跑通之后，最先应该补的不是 multi-agent，而是三条基础防线：
+最小 Agent loop 让流程跑通之后，最先应该补的不是 multi-agent，而是几条基础防线：
 
 ```mermaid
 flowchart LR
@@ -91,7 +91,50 @@ AGENT_RETRY_DELAY_MS=500
 
 timeout 覆盖整个 stream 生命周期，用户取消也会继续传给 provider 的 SSE 请求。
 
+## Token / 成本预算
+
+`BudgetTracker` 在每次 `Agent.run()` 开始时新建，累计模型返回的 input、output、
+cache read 和 cache write token。每个完整模型响应都会产生一个 `usage` 事件，CLI 和
+Web UI 可以据此展示本次任务已经消耗的资源。
+
+```ts
+const agent = new Agent({
+  model,
+  budget: {
+    maxTotalTokens: 120_000,
+    maxCost: 10,
+    pricing: {
+      currency: "CNY",
+      // 请填写你当前套餐或模型的实际单价，不要照抄旧价格。
+      inputCostPerMillionTokens: inputPrice,
+      outputCostPerMillionTokens: outputPrice,
+    },
+  },
+});
+```
+
+CLI 和 Web UI 也可以通过 `.env` 配置。价格和币种都是用户配置，项目不会假设某个
+MiniMax 套餐的固定价格：
+
+```dotenv
+AGENT_MAX_TOTAL_TOKENS=120000
+
+# 需要成本预算时取消注释，并填入当前套餐的真实数字
+# AGENT_MAX_COST=10
+# AGENT_COST_CURRENCY=CNY
+# AGENT_INPUT_COST_PER_MILLION_TOKENS=
+# AGENT_OUTPUT_COST_PER_MILLION_TOKENS=
+```
+
+!!! warning "这是 soft budget"
+    provider 只有在一次响应结束后才会报告 usage，因此最后一次调用可能越过上限。
+    Agent 会在开始**下一次**模型调用前停止。配置了预算但 provider 不返回 usage 时，
+    Agent 会明确报错，而不是假装预算仍然可信。
+
+预算作用域是一次 `run()`。若要限制整个会话、用户或账户，应在外层服务中持久化累计值，
+再把剩余额度传给每次任务。
+
 ## 为什么独立成模块
 
 `agent-loop.ts` 仍然只负责“模型 → 工具 → 模型”的控制流。参数校验和模型调用策略可以
-单独测试、替换和继续扩展，后续加入限流、熔断、预算时不需要重写 Agent loop。
+单独测试、替换和继续扩展，后续加入限流、熔断时不需要重写 Agent loop。

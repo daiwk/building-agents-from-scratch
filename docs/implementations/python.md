@@ -13,8 +13,9 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 6. `memory.py`：内存与 JSON ConversationStore；
 7. `skills.py`：读取、选择和注入 SKILL.md；
 8. `reliability.py`：timeout、retry 和指数退避；
-9. `runtime.py`：统一读取环境变量；
-10. `cli.py`：终端交互外壳。
+9. `budget.py`：单次任务的 token / 成本软预算；
+10. `runtime.py`：统一读取环境变量；
+11. `cli.py`：终端交互外壳。
 
 ## 运行
 
@@ -42,6 +43,7 @@ AGENT_MODEL_TIMEOUT_MS=120000
 AGENT_MODEL_MAX_RETRIES=1
 AGENT_RETRY_DELAY_MS=500
 AGENT_MAX_RETRY_DELAY_MS=8000
+AGENT_MAX_TOTAL_TOKENS=120000
 ```
 
 不设置 `AGENT_MEMORY_FILE` 时仍是纯内存对话；不设置 `AGENT_SKILLS` 时不会加载任何
@@ -50,6 +52,10 @@ skill。工具参数会在执行前通过与 TypeScript 版相同的 JSON Schema
 Python 无法安全地强制终止任意同步函数，因此教学版 timeout 使用 daemon worker 停止
 外层等待，同时 MiniMax provider 自身也设置 socket timeout。生产级异步服务建议改用
 asyncio/httpx，而不是无限增加后台线程。
+
+预算语义也与 TypeScript 版一致：每次 `run()` 重新累计，MiniMax 返回一条完整响应后产生
+`usage` 事件，达到上限时不再开始下一次模型调用。需要成本预算时，再按 `.env.example`
+填写 `AGENT_MAX_COST`、币种和当前套餐的真实 token 单价。
 
 ## 为什么用 `yield`
 

@@ -4,6 +4,7 @@ import { loadEnvFile } from "node:process";
 import {
   Agent,
   RecentContextBuilder,
+  createBudgetFromEnvironment,
   type AgentHooks,
   type ContextBuilder,
   type ModelProvider,
@@ -40,6 +41,12 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
   const skillConfiguration = configureSkills(basePrompt);
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
   const contextBuilder = createContextBuilderFromEnv();
+  const budget = createBudgetFromEnvironment();
+  if (budget && providerName !== "minimax") {
+    throw new Error(
+      `AGENT_* budget requires a provider with token usage; ${providerName} does not report it.`,
+    );
+  }
 
   return new Agent({
     model,
@@ -49,6 +56,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
       ? { hooks: skillConfiguration.hooks }
       : {}),
     ...(contextBuilder ? { contextBuilder } : {}),
+    ...(budget ? { budget } : {}),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),

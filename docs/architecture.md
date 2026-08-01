@@ -51,11 +51,16 @@ classDiagram
       <<interface>>
       +build(context) BuiltContext
     }
+    class BudgetTracker {
+      +record(usage) BudgetSnapshot
+      +assertCanStartModelCall()
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
     Agent --> ConversationStore
     Agent --> ContextBuilder
+    Agent --> BudgetTracker
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool
@@ -95,8 +100,8 @@ Browser
 ```
 
 每个浏览器会话对应一个内存中的 `Agent` 实例。服务端逐行输出 NDJSON，因此工具开始、
-工具结束和模型轮次会立即出现在右侧轨迹中。以后把 provider 升级为 token streaming 时，
-同一条通道也可以继续发送 text delta，不需要更换前端协议。
+工具结束、模型 delta、usage 和完成状态都会立即出现在右侧轨迹中。完整消息仍只在流结束
+后写入 history，临时 delta 不会污染下一轮 context。
 
 ## 为什么 provider 返回完整消息
 

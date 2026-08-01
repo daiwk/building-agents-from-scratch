@@ -1,5 +1,6 @@
 export * from "./agent.js";
 export * from "./agent-loop.js";
+export * from "./budget.js";
 export * from "./context-builder.js";
 export * from "./memory.js";
 export * from "./model-call.js";

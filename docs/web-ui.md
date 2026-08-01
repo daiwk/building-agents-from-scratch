@@ -32,6 +32,10 @@ MiniMax provider 现在会把 SSE 的 `textDelta` 直接穿过 Agent 和 NDJSON 
 所以回答会边生成边显示。`thinkingDelta` 只更新“模型正在推理”的状态，不展示内部思考
 正文；`toolArgumentsDelta` 会显示“正在生成工具参数”，完整 JSON 形成后才校验和执行。
 
+每个带 usage 的完整模型响应还会新增一张 `USAGE` 轨迹卡，展示累计 input、output 和
+total token；配置单价后也会显示对应币种的估算成本。它同时让用户能分辨“还在运行”和
+“已经完成但没有继续调用模型”。
+
 ## 为什么使用 NDJSON
 
 每个事件是一行 JSON，浏览器可以边读取边渲染，不必等待完整响应。模型服务到 Node

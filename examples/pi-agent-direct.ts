@@ -18,6 +18,11 @@ import { createModels, Type } from "@earendil-works/pi-ai";
 import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
 import { JsonFileConversationStore } from "../src/memory/index.js";
 import {
+  BudgetExceededError,
+  BudgetTracker,
+  createBudgetFromEnvironment,
+} from "../src/core/index.js";
+import {
   SkillCatalog,
   applySkillsToSystemPrompt,
   loadSkillsFromDirectory,
@@ -168,6 +173,8 @@ export async function createPiAgent(): Promise<PiAgent> {
     "AGENT_MAX_RETRY_DELAY_MS",
     8_000,
   );
+  const budgetOptions = createBudgetFromEnvironment();
+  let budget = new BudgetTracker(budgetOptions);
 
   const agent = new PiAgent({
     initialState: {
@@ -194,6 +201,10 @@ export async function createPiAgent(): Promise<PiAgent> {
 
   // pi-agent 已提供比教学版更细的标准事件。
   agent.subscribe((event) => {
+    if (event.type === "agent_start") {
+      // pi-agent 实例可以多次 prompt；预算与 from-scratch 版一样按单次 run 重置。
+      budget = new BudgetTracker(budgetOptions);
+    }
     if (
       event.type === "message_update" &&
       event.assistantMessageEvent.type === "text_delta"
@@ -205,6 +216,34 @@ export async function createPiAgent(): Promise<PiAgent> {
     }
     if (event.type === "tool_execution_end") {
       console.log(`[result] ${event.toolName}`, event.result);
+    }
+    if (event.type === "message_end" && event.message.role === "assistant") {
+      const usage = event.message.usage;
+      const totals = budget.record({
+        input: usage.input,
+        output: usage.output,
+        cacheRead: usage.cacheRead,
+        cacheWrite: usage.cacheWrite,
+      });
+      const cost =
+        totals.estimatedCost === undefined
+          ? ""
+          : ` · estimated ${totals.currency} ${totals.estimatedCost.toFixed(6)}`;
+      console.log(`\n[usage] ${totals.totalTokens} tokens${cost}`);
+    }
+    if (
+      event.type === "turn_end" &&
+      event.message.role === "assistant" &&
+      event.message.content.some((block) => block.type === "toolCall")
+    ) {
+      try {
+        budget.assertCanStartModelCall();
+      } catch (error) {
+        if (!(error instanceof BudgetExceededError)) throw error;
+        // turn_end 已在所有工具执行后发生；此时取消可阻止下一次模型调用。
+        console.error(`\n[budget] ${error.message}`);
+        agent.abort();
+      }
     }
     if (event.type === "agent_end") {
       console.log("\n[done]");

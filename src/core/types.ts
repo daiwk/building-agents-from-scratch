@@ -83,6 +83,34 @@ export type TokenUsage = {
   cacheWrite?: number;
 };
 
+/** 价格由应用配置，不在代码里硬编码会随时间变化的供应商价格。 */
+export type TokenPricing = {
+  currency: string;
+  inputCostPerMillionTokens: number;
+  outputCostPerMillionTokens: number;
+  cacheReadCostPerMillionTokens?: number;
+  cacheWriteCostPerMillionTokens?: number;
+};
+
+/** 每次 Agent.run() 使用一份独立预算。 */
+export type AgentBudget = {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  maxTotalTokens?: number;
+  maxCost?: number;
+  pricing?: TokenPricing;
+};
+
+export type BudgetSnapshot = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  estimatedCost?: number;
+  currency?: string;
+};
+
 export type ToolExecutionContext = {
   messages: readonly AgentMessage[];
   signal?: AbortSignal;
@@ -160,6 +188,11 @@ export type AgentEvent =
   | { type: "turnStart"; turn: number }
   | ModelStreamEvent
   | { type: "message"; message: AssistantMessage }
+  | {
+      type: "usage";
+      usage: TokenUsage;
+      totals: BudgetSnapshot;
+    }
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }
   | { type: "toolStart"; call: ToolCallBlock }

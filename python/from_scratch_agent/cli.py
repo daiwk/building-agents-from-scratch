@@ -26,6 +26,15 @@ def main() -> None:
                 print("  result>", event["result"]["content"])
             elif event["type"] == "text":
                 print("agent>", event["text"])
+            elif event["type"] == "usage":
+                totals = event["totals"]
+                cost = ""
+                if "estimated_cost" in totals:
+                    cost = (
+                        f" · estimated {totals['currency']} "
+                        f"{totals['estimated_cost']:.6f}"
+                    )
+                print(f"  usage> {totals['total_tokens']} tokens{cost}")
 
 
 if __name__ == "__main__":

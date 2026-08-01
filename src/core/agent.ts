@@ -5,6 +5,7 @@ import {
 } from "./agent-loop.js";
 import type {
   AgentContext,
+  AgentBudget,
   AgentEvent,
   AssistantMessage,
   ModelProvider,
@@ -23,6 +24,7 @@ export type AgentOptions = {
   modelCall?: ModelCallPolicy;
   memory?: AgentMemoryOptions;
   contextBuilder?: ContextBuilder;
+  budget?: AgentBudget;
 };
 
 /**
@@ -39,6 +41,7 @@ export class Agent {
   private readonly modelCall: ModelCallPolicy | undefined;
   private readonly memory: AgentMemoryOptions | undefined;
   private readonly contextBuilder: ContextBuilder | undefined;
+  private readonly budget: AgentBudget | undefined;
   private memoryLoaded = false;
 
   constructor(options: AgentOptions) {
@@ -49,6 +52,7 @@ export class Agent {
     this.modelCall = options.modelCall;
     this.memory = options.memory;
     this.contextBuilder = options.contextBuilder;
+    this.budget = options.budget;
     this.context = {
       systemPrompt: options.systemPrompt ?? "You are a helpful assistant.",
       messages: [],
@@ -67,6 +71,7 @@ export class Agent {
     const hooks = options.hooks ?? this.hooks;
     const modelCall = options.modelCall ?? this.modelCall;
     const contextBuilder = options.contextBuilder ?? this.contextBuilder;
+    const budget = options.budget ?? this.budget;
     // yield* 把内部生成器产生的事件原样转发给外部调用者。
     try {
       return yield* agentLoop(this.context, this.model, {
@@ -74,6 +79,7 @@ export class Agent {
         ...(hooks ? { hooks } : {}),
         ...(modelCall ? { modelCall } : {}),
         ...(contextBuilder ? { contextBuilder } : {}),
+        ...(budget ? { budget } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } finally {
