@@ -41,6 +41,7 @@ nav:
       - 可靠性模块: concepts/reliability.md
       - 可观测性与 Trace: concepts/tracing.md
       - Tools、Memory 与 Skills: concepts/components.md
+      - Sub-agent 与 Graph: concepts/orchestration.md
       - 架构说明: architecture.md
   - 三种实现:
       - 如何选择: implementations/index.md

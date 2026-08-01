@@ -191,7 +191,10 @@ src/
 │   ├── catalog.ts         # 选择、发现并注入 skill
 │   └── router.ts          # 根据用户输入动态选择
 ├── subagents/
-│   └── agent-as-tool.ts   # 将独立 child Agent 包装成工具
+│   ├── agent-as-tool.ts   # 结构化 child handoff 与 event bus
+│   └── scheduler.ts       # 有界并行 multi-agent
+├── graph/
+│   └── runtime.ts         # node/edge/checkpoint/reducer/interrupt
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
@@ -242,10 +245,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory�
 
 推荐迭代顺序：
 
-1. sub-agent 的结构化 handoff、深度与 token/time budget；
-2. scheduler + shared event bus，实现 multi-agent；
-3. 用状态节点和条件边实现 graph；
-4. eval + versioned artifacts + approval gate，实现受控 self-evolve。
+1. eval + versioned artifacts + approval gate，实现受控 self-evolve。
 
 ## 验证
 

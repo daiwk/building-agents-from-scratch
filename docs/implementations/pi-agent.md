@@ -96,5 +96,13 @@ pi-ai 自身也会计算 provider cost，但本示例的成本上限只采用你
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改
 协议以及验证自己的架构想法。
 
+Stage 4/5 是 Agent 外层的 orchestration：pi-agent 实例可以作为 scheduler worker 或
+`StateGraph` node，原生 lifecycle event 可转发到同一个 event bus。Graph 不复制 pi-agent
+内部 loop，只负责 child 之间的任务、状态、checkpoint 与审批路径。
+
+`runPiAgentHandoff()` 已把 `prompt()`、usage、timeout/abort 和错误统一转换成
+`HandoffResult`。可以直接在 graph node 中调用；需要有界并发时，把多个调用函数交给
+`SubagentScheduler.runWorkers()`，结果仍按输入顺序返回。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

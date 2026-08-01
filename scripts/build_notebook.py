@@ -254,6 +254,59 @@ print("自动发现：", [skill.name for skill in skill_catalog.discover("写分
     ),
     markdown(
         """
+## Stage 4/5：Sub-agent 与 Graph
+
+Sub-agent 返回结构化 handoff；Graph 只在需要条件路径、checkpoint 或审批时使用。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import (
+    InMemoryGraphCheckpointStore,
+    StateGraph,
+    run_subagent,
+)
+
+class AnswerModel:
+    name = "child"
+    def generate(self, system_prompt, messages, tools):
+        return {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "子任务完成"}],
+            "usage": {"input_tokens": 2, "output_tokens": 3},
+        }
+
+handoff = run_subagent(
+    "检查报告",
+    lambda: Agent(AnswerModel()),
+    agent_id="reviewer",
+    max_depth=2,
+    max_turns=2,
+    max_tokens=20,
+)
+print(handoff)
+"""
+    ),
+    code(
+        """
+checkpoints = InMemoryGraphCheckpointStore()
+graph = StateGraph(checkpoints=checkpoints)
+graph.add_node("approval", lambda state, context: (
+    {"approved": True}
+    if context.get("resume_value") == "yes"
+    else context["interrupt"]("需要人工审批")
+)).set_start("approval")
+
+paused = graph.run({"draft": "v1"}, checkpoint_id="notebook-run")
+print("暂停：", paused)
+resumed = graph.run(
+    {}, checkpoint_id="notebook-run", resume=True, resume_value="yes"
+)
+print("恢复：", resumed)
+"""
+    ),
+    markdown(
+        """
 ### 7. 可选：调用真实 MiniMax
 
 只有同时设置 `MINIMAX_API_KEY` 和 `RUN_LIVE_MINIMAX=1` 才会真正请求网络。这样重新执行

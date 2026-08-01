@@ -8,7 +8,8 @@ Notebook 位于 `notebooks/agent_from_scratch.ipynb`。它默认使用固定回�
 - 可以清楚看到每一轮消息变化。
 
 后半部分继续演示 Stage 2/3：可插拔 token counter、旧历史摘要、三类 MemoryIndex、
-Skill 版本和依赖解析，同样不需要 API Key。
+Skill 版本和依赖解析，以及 Stage 4/5 的结构化 sub-agent handoff 与 interrupt/resume
+Graph，同样不需要 API Key。
 
 ## 打开
 

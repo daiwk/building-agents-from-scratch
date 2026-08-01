@@ -71,6 +71,14 @@ classDiagram
       <<interface>>
       +export(span)
     }
+    class SubagentScheduler {
+      +run(tasks)
+    }
+    class StateGraph {
+      +addNode(name, node)
+      +addEdge(from, to, condition)
+      +run(state)
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
@@ -81,6 +89,9 @@ classDiagram
     Agent --> ModelRateLimiter
     Agent --> AgentTracer
     AgentTracer --> TraceExporter
+    Agent --> SubagentScheduler
+    SubagentScheduler --> Agent
+    StateGraph --> Agent
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool
