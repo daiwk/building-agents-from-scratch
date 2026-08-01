@@ -111,5 +111,9 @@ prompt artifact。Evaluator 可以为 baseline/candidate 分别创建新实例�
 token 与耗时后生成二元 `EvalSampleResult`。版本、holdout、gate、人工审批和发布仍由
 `EvolutionController` 管理，pi-agent 本身不能切换 active version。
 
+设置 `AGENT_WORKSPACE_ROOT` 后，示例会把同一组 workspace tools 适配成 pi-agent 的
+`AgentTool`；仍需在 `PI_AGENT_TOOLS` 或 `AGENT_TOOLS` 中逐个授权。Trace replay 位于 Agent
+外层，所以 from-scratch 与 pi-agent 录制的完成轨迹可以进入同一个固定 dataset。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

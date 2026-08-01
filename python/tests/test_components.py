@@ -208,7 +208,7 @@ class ComponentTest(unittest.TestCase):
                 environ,
                 {
                     "MINIMAX_API_KEY": "test-key",
-                    "AGENT_TOOLS": "calculator",
+                    "AGENT_TOOLS": "calculator,read_file",
                     "AGENT_MEMORY_DATABASE": memory_database,
                     "AGENT_SESSION_ID": "python-test",
                     "AGENT_SKILLS_DIR": "skills",
@@ -221,6 +221,8 @@ class ComponentTest(unittest.TestCase):
                     "AGENT_RATE_LIMIT_WINDOW_MS": "60000",
                     "AGENT_TOOL_EXECUTION": "parallel",
                     "AGENT_TRACE_FILE": str(Path(directory) / "traces.jsonl"),
+                    "AGENT_WORKSPACE_ROOT": directory,
+                    "AGENT_WORKSPACE_ALLOW_WRITE": "false",
                 },
                 clear=True,
             ):
@@ -228,7 +230,7 @@ class ComponentTest(unittest.TestCase):
 
             self.assertEqual(
                 [tool.name for tool in agent.context.tools],
-                ["calculator"],
+                ["calculator", "read_file"],
             )
             self.assertIn(
                 '<skill name="tool-first">',

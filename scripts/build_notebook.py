@@ -370,6 +370,70 @@ print("审计记录：", evolution.release_history())
     ),
     markdown(
         """
+## Stage 7：Trace Replay
+
+Recorded trace 可以在不调用模型和真实工具的情况下重复评分。公开 eval 与隐藏 holdout 必须
+同时存在；这是一层快速回归检查，不替代真实模型评测。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import (
+    ReplayEvalCase,
+    TraceReplayEvaluator,
+    compare_artifacts,
+    to_eval_cases,
+)
+
+replay_events = [{"type": "agentStart"}, {"type": "agentEnd"}]
+def replay_case(case_id, split):
+    return ReplayEvalCase(case_id, "退款请求", split, "先核验", "contains", {
+        "1": {"artifactVersion": 1, "output": "直接退款", "safetyPassed": False,
+              "tokens": 10, "cost": 0.01, "latencyMs": 20, "events": replay_events},
+        "2": {"artifactVersion": 2, "output": "先核验订单", "safetyPassed": True,
+              "tokens": 10, "cost": 0.01, "latencyMs": 20, "events": replay_events},
+    })
+
+replay_dataset = [replay_case("public", "eval"), replay_case("hidden", "holdout")]
+replay = TraceReplayEvaluator(replay_dataset)
+replay_report = compare_artifacts(
+    ArtifactVersion("p", "prompt", 1, "v1", "2026-01-01T00:00:00Z"),
+    ArtifactVersion("p", "prompt", 2, "v2", "2026-01-02T00:00:00Z", 1),
+    to_eval_cases(replay_dataset), replay,
+)
+print("Replay gate：", replay_report.gate_passed)
+"""
+    ),
+    markdown(
+        """
+## Stage 9：安全 Workspace Tools
+
+工具默认只读，所有路径都必须留在唯一 root 中。长输出不会全部塞进 Context，而是保存为
+artifact，再按 offset/limit 分段读取。
+"""
+    ),
+    code(
+        """
+from tempfile import TemporaryDirectory
+from from_scratch_agent import create_workspace_toolkit
+
+with TemporaryDirectory() as workspace_directory:
+    sample = Path(workspace_directory) / "notes.txt"
+    sample.write_text("Agent loop\\n" + "x" * 100, encoding="utf-8")
+    workspace_kit = create_workspace_toolkit(
+        workspace_directory, max_inline_characters=24
+    )
+    workspace_tools = {tool.name: tool for tool in workspace_kit.registry.list()}
+    print("默认工具：", list(workspace_tools))
+    truncated = workspace_tools["read_file"].execute({"path": "notes.txt"})
+    print(truncated)
+    print(workspace_tools["read_artifact"].execute({
+        "id": "artifact-1", "offset": 0, "limit": 10,
+    }))
+"""
+    ),
+    markdown(
+        """
 ### 7. 可选：调用真实 MiniMax
 
 只有同时设置 `MINIMAX_API_KEY` 和 `RUN_LIVE_MINIMAX=1` 才会真正请求网络。这样重新执行

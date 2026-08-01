@@ -151,3 +151,64 @@ TypeScript 与 Python 的 `EvolutionController` 都要求候选关联失败 trac
 candidate content 和 rationale，但不能调用 `approve()` 或 `publish()`；release gate 通过后
 仍需提供人工身份。`InMemoryArtifactStore` 是可观察的教学实现，生产环境应在同一接口后接
 数据库、制品仓库和组织自己的权限系统。
+
+## Stage 7：Trace Replay 与 Eval Workbench（已完成）
+
+- ~~JSONL 固定数据集与 SHA-256 fingerprint~~；
+- ~~失败 trace 提升为二元 rubric eval case~~；
+- ~~不访问模型和真实工具的 deterministic replay~~；
+- ~~baseline/candidate diff 与 release gate~~；
+- ~~JSON eval report 持久化~~；
+- ~~可在 CI 使用退出码阻止回归~~。
+
+`TraceReplayEvaluator` 会校验 `agentStart → toolStart/toolEnd → agentEnd` 的结构，并使用
+录制时的输出、usage、成本和延迟重新评分。Replay 适合稳定回归，不等于真实线上质量；仍需
+定期运行真实模型评测，并人工检查失败模式。
+
+## Stage 8：高级能力 Web Playground（已完成）
+
+`/playground.html` 是不需要 API Key 的组件实验台。目前可以逐步运行：
+
+- ~~Memory：完整历史与本轮 Context 快照~~；
+- ~~Skills：发现、依赖解析与注入~~；
+- ~~Sub-agent：父子事件和 handoff~~；
+- ~~Graph：fork、reducer 与最终 state~~；
+- ~~Self-evolve / Trace replay：评测、gate 和发布~~；
+- ~~Workspace：默认只读与显式写授权~~。
+
+每个 demo 调用项目里的真实组件，但使用固定输入和假模型。页面在普通宽屏与手机宽度下都
+保持文档流滚动，不使用锁死整页的固定高度。
+
+## Stage 9：安全 Workspace Tools 与 Artifact（已完成）
+
+- ~~`list_files`、`read_file`、`search_text`~~；
+- ~~宿主显式开启后才注册 `write_file`~~；
+- ~~root confinement、路径穿越与 symlink escape 防护~~；
+- ~~文件大小、条目数、匹配数和写入大小限制~~；
+- ~~长结果转为 artifact，并用 `read_artifact` 分段读取~~；
+- ~~TypeScript、Python 与 pi-agent 共用工具语义~~。
+
+这些工具不执行 shell、不访问网络，也不会自动扩大 Skill 权限。通过
+`AGENT_WORKSPACE_ROOT` 设置唯一允许目录；`AGENT_WORKSPACE_ALLOW_WRITE` 默认 false。
+
+## Stage 10：MCP 接入（计划）
+
+先支持 stdio tool discovery/call、server/tool 白名单、timeout/cancel 和 secret 脱敏；
+Resources、Prompts 与远程 transport 后续再加入。MCP adapter 进入 ToolRegistry，不修改
+Agent loop。
+
+## Stage 11：Structured Output 与模型路由（计划）
+
+加入可校验 JSON 输出、无效结果 repair、按任务选模型、fallback，以及 generator/judge
+隔离统计。Graph planner 和 Skill router 只能输出宿主允许的结构。
+
+## Stage 12：Durable Runtime（计划）
+
+提供 SQLite checkpoint、持久化 task queue、run/event store、幂等 task ID，以及服务重启后
+继续 interrupt/sub-agent；分布式队列保持为可替换生产实现。
+
+## Stage 13–15（远期）
+
+- Stage 13：带引用的文档摄取与 BM25/vector hybrid retrieval；
+- Stage 14：文件上传、图片输入、Artifact 预览与下载；
+- Stage 15：认证、租户隔离、RBAC、密钥管理、审计与部署模板。

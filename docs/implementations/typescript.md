@@ -68,6 +68,10 @@ Stage 6 位于 `src/evolution/`。`EvolutionController` 把 propose、固定 eva
 人工 approve、publish 和 rollback 分开；`ArtifactStore` 与 `ArtifactEvaluator` 都可替换，
 不会把某个数据库、模型或 judge 藏进核心流程。
 
+Stage 7–9 分别位于 `src/evals/`、`src/web/playground.ts` 与 `src/workspace/`。Eval CLI 可在
+CI 中重放 JSONL fixture；Component Lab 展示真实组件状态；Workspace toolkit 默认只读，
+长结果通过 artifact 分段读取。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；

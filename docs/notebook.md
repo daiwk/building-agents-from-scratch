@@ -11,6 +11,7 @@ Notebook 位于 `notebooks/agent_from_scratch.ipynb`。它默认使用固定回�
 Skill 版本和依赖解析，以及 Stage 4/5 的结构化 sub-agent handoff 与 interrupt/resume
 Graph，同样不需要 API Key。
 最后的 Stage 6 单元格还会离线演示 candidate、eval/holdout、人工审批、发布和回滚。
+Stage 7/9 继续演示 deterministic trace replay、workspace 路径边界和长输出 artifact。
 
 ## 打开
 

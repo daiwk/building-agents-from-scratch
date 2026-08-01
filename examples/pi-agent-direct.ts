@@ -37,6 +37,7 @@ import {
   loadSkillsFromDirectory,
 } from "../src/skills/index.js";
 import type { HandoffResult } from "../src/subagents/index.js";
+import { createWorkspaceToolKit } from "../src/workspace/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -152,6 +153,28 @@ export async function createPiAgent(
   const toolRegistry = new PiToolRegistry()
     .register(calculatorTool)
     .register(currentTimeTool);
+  const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
+  if (workspaceRoot) {
+    const workspaceTools = createWorkspaceToolKit({
+      root: workspaceRoot,
+      allowWrite: readBoolean("AGENT_WORKSPACE_ALLOW_WRITE", false),
+    }).registry.list();
+    for (const tool of workspaceTools) {
+      toolRegistry.register({
+        name: tool.name,
+        label: tool.name,
+        description: tool.description,
+        parameters: Type.Unsafe(tool.inputSchema as any),
+        async execute(_toolCallId, params) {
+          const text = await tool.execute(
+            params as Record<string, import("../src/core/index.js").JsonValue>,
+            { messages: [] },
+          );
+          return { content: [{ type: "text", text }], details: {} };
+        },
+      });
+    }
+  }
   const selectedTools = toolRegistry.select(
     readList("PI_AGENT_TOOLS", readList("AGENT_TOOLS", [
       "calculator",
@@ -538,6 +561,14 @@ function readToolExecutionMode(): "sequential" | "parallel" {
     );
   }
   return value;
+}
+
+function readBoolean(name: string, fallback: boolean): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return fallback;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error(`${name} must be true or false.`);
 }
 
 const isMain =

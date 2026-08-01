@@ -1,0 +1,8 @@
+{
+  "artifactId": "support-prompt",
+  "kind": "prompt",
+  "version": 2,
+  "content": "先核对事实；信息不足时明确追问。",
+  "createdAt": "2026-08-02T00:00:00.000Z",
+  "parentVersion": 1
+}

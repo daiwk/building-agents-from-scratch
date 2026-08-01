@@ -28,6 +28,7 @@ import {
   loadSkillsFromDirectory,
 } from "../skills/index.js";
 import { createBuiltinToolRegistry } from "../tools/index.js";
+import { createWorkspaceToolKit } from "../workspace/index.js";
 
 // 同一个后端文件只创建一个 store 实例，供 CLI/Web 的多个会话复用连接或写入队列。
 const memoryStores = new Map<string, ConversationStore>();
@@ -42,6 +43,13 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
   const providerName = getProviderName();
   const model = createProvider(providerName);
   const toolRegistry = createBuiltinToolRegistry();
+  const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
+  if (workspaceRoot) {
+    toolRegistry.registerMany(createWorkspaceToolKit({
+      root: workspaceRoot,
+      allowWrite: readBoolean("AGENT_WORKSPACE_ALLOW_WRITE", false),
+    }).registry.list());
+  }
   // Codex CLI 适配器本身已经是 Agent，当前不能接收这里注册的工具。
   const selectedToolNames =
     providerName === "minimax"
@@ -134,6 +142,14 @@ function readToolExecutionMode(): ToolExecutionMode {
     );
   }
   return value;
+}
+
+function readBoolean(name: string, fallback: boolean): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return fallback;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error(`${name} must be true or false.`);
 }
 
 function createProvider(name: string): ModelProvider {

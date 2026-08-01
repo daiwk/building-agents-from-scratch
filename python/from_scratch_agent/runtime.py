@@ -21,6 +21,7 @@ from .skills import (
     load_skills_from_directory,
 )
 from .tracing import JsonlTraceExporter, Tracer
+from .workspace import create_workspace_toolkit
 
 
 def load_local_env(file_path: str | Path = ".env") -> None:
@@ -56,7 +57,14 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         "AGENT_TOOLS",
         ["calculator", "current_time"],
     )
-    tools = create_builtin_tool_registry().select(tool_names)
+    tool_registry = create_builtin_tool_registry()
+    workspace_root = os.environ.get("AGENT_WORKSPACE_ROOT", "").strip()
+    if workspace_root:
+        tool_registry.register_many(create_workspace_toolkit(
+            workspace_root,
+            allow_write=_read_bool("AGENT_WORKSPACE_ALLOW_WRITE", False),
+        ).registry.list())
+    tools = tool_registry.select(tool_names)
 
     skill_names = _read_list("AGENT_SKILLS")
     selected_skills = []
@@ -147,6 +155,17 @@ def _read_tool_execution() -> str:
     if value not in {"sequential", "parallel"}:
         raise ValueError("AGENT_TOOL_EXECUTION 必须是 sequential 或 parallel")
     return value
+
+
+def _read_bool(name: str, fallback: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return fallback
+    if raw in {"true", "1"}:
+        return True
+    if raw in {"false", "0"}:
+        return False
+    raise ValueError(f"{name} 必须是 true 或 false")
 
 
 def _create_rate_limiter_from_env() -> ModelRateLimiter | None:

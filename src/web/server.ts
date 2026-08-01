@@ -14,6 +14,7 @@ import {
   getProviderName,
   loadLocalEnv,
 } from "../runtime/create-agent.js";
+import { PLAYGROUND_DEMOS, runPlaygroundDemo } from "./playground.js";
 
 type WebServerOptions = {
   // `?` 表示测试可以传入这些配置，正式运行时也可以全部省略。
@@ -50,6 +51,14 @@ export function createWebServer(options: WebServerOptions = {}): Server {
 
       if (request.method === "GET" && url.pathname === "/api/health") {
         return sendJson(response, 200, { ok: true, provider: providerName });
+      }
+      if (request.method === "GET" && url.pathname === "/api/playground/demos") {
+        return sendJson(response, 200, { demos: PLAYGROUND_DEMOS });
+      }
+      if (request.method === "POST" && url.pathname === "/api/playground/run") {
+        const body = await readJson(request);
+        const demo = typeof body.demo === "string" ? body.demo : "";
+        return sendJson(response, 200, await runPlaygroundDemo(demo));
       }
       if (request.method === "POST" && url.pathname === "/api/chat") {
         return await handleChat(
@@ -160,7 +169,10 @@ function serveStatic(
   response: ServerResponse,
 ): void {
   const route = pathname === "/" ? "/index.html" : pathname;
-  const allowed = new Set(["/index.html", "/styles.css", "/app.js"]);
+  const allowed = new Set([
+    "/index.html", "/styles.css", "/app.js",
+    "/playground.html", "/playground.css", "/playground.js",
+  ]);
   if (!allowed.has(route)) {
     return sendJson(response, 404, { error: "File not found." });
   }
