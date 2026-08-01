@@ -246,6 +246,20 @@ function handleAgentEvent(event) {
     return;
   }
 
+  if (event.type === "usage") {
+    const cost =
+      event.totals.estimatedCost === undefined
+        ? ""
+        : ` · estimated ${event.totals.currency} ${event.totals.estimatedCost.toFixed(6)}`;
+    addTraceEvent(
+      "model",
+      "USAGE",
+      `${event.totals.totalTokens} tokens`,
+      `input ${event.totals.inputTokens} · output ${event.totals.outputTokens}${cost}`,
+    );
+    return;
+  }
+
   if (event.type === "text" || event.type === "textDelta") {
     const text = event.type === "textDelta" ? event.delta : event.text;
     if (!state.assistantMessage) {

@@ -54,3 +54,22 @@ AGENT_SKILLS=auto
 
 `RecentContextBuilder` 使用字符数近似 token 数并保留完整轮次。`AGENT_SKILLS=auto`
 使用确定性关键词匹配，适合学习和小型 skill 集合，不等同于语义检索。
+
+## 配置一次任务的预算
+
+```dotenv
+AGENT_MAX_TOTAL_TOKENS=120000
+
+# 需要成本预算时取消注释，并填入当前套餐的真实数字
+# AGENT_MAX_COST=10
+# AGENT_COST_CURRENCY=CNY
+# AGENT_INPUT_COST_PER_MILLION_TOKENS=
+# AGENT_OUTPUT_COST_PER_MILLION_TOKENS=
+```
+
+预算在每次 `Agent.run()` 时重新计算。MiniMax provider 会返回 usage，因此 CLI 和 Web UI
+能展示累计 token 和估算成本；实验性的 Codex CLI 后端不提供可核验的 usage，配置预算时
+会直接拒绝启动，避免显示一个不可信的数字。价格请按你的当前套餐自行填写。
+
+预算在一次响应结束后才更新，所以它会阻止的是**下一次**模型调用，而不是截断已经开始的
+响应。需要账户级硬额度时，应同时使用模型平台的限额和服务端持久化计量。

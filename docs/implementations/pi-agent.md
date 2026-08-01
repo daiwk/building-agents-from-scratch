@@ -55,6 +55,16 @@ AGENT_MAX_RETRY_DELAY_MS=8000
 这使用成熟库原生的 provider timeout/retry，而不是在 pi-agent 外再复制一遍
 from-scratch 重试循环。
 
+## Token / 成本预算
+
+pi-agent 的完整 assistant message 自带标准化 usage。示例把它交给与 TypeScript 版共用的
+`BudgetTracker`，因此仍使用同一组 `AGENT_MAX_*` 和 `AGENT_*_COST_*` 环境变量。每次
+`prompt()` 在 `agent_start` 时重置计数；带工具调用的 turn 达到上限后，会在工具完成后
+调用 pi-agent 的取消接口，不再启动下一次模型调用。
+
+pi-ai 自身也会计算 provider cost，但本示例的成本上限只采用你显式配置的币种与单价，
+避免教程把会变化的套餐价格写死。
+
 ## 与教学版对照
 
 | 教学版 | pi-agent |
@@ -65,6 +75,7 @@ from-scratch 重试循环。
 | 一个 MiniMax provider | pi-ai 的 provider 与 model registry |
 | 自己实现 Schema 子集 | TypeBox + pi-agent 原生校验 |
 | 自己实现模型重试循环 | pi-ai provider 原生 timeout/retry |
+| 共用 `BudgetTracker` | 原生 usage + 生命周期事件驱动预算 |
 
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改
 协议以及验证自己的架构想法。

@@ -1,6 +1,13 @@
 """适合初学者阅读的最小 Agent 包。"""
 
 from .agent import Agent, agent_loop
+from .budget import (
+    AgentBudget,
+    BudgetExceededError,
+    BudgetTracker,
+    BudgetUsageUnavailableError,
+    TokenPricing,
+)
 from .memory import InMemoryConversationStore, JsonFileConversationStore
 from .minimax import MiniMaxProvider
 from .registry import ToolRegistry, create_builtin_tool_registry
@@ -31,6 +38,11 @@ __all__ = [
     "Tool",
     "ToolRegistry",
     "agent_loop",
+    "AgentBudget",
+    "BudgetExceededError",
+    "BudgetTracker",
+    "BudgetUsageUnavailableError",
+    "TokenPricing",
     "apply_skills_to_system_prompt",
     "calculator_tool",
     "create_builtin_tool_registry",

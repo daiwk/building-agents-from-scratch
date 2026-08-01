@@ -3,7 +3,14 @@
 import unittest
 from typing import Any
 
-from from_scratch_agent import Agent, calculator_tool
+from from_scratch_agent import (
+    Agent,
+    AgentBudget,
+    BudgetExceededError,
+    BudgetTracker,
+    TokenPricing,
+    calculator_tool,
+)
 from from_scratch_agent.types import Message, Tool
 
 
@@ -87,6 +94,71 @@ class AgentTest(unittest.TestCase):
 
         self.assertTrue(agent.context.messages[2]["is_error"])
         self.assertIn("未知工具", agent.context.messages[2]["content"])
+
+    def test_budget_emits_usage_and_blocks_the_next_model_call(self) -> None:
+        model = ScriptedModel(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "id": "budget-call",
+                            "name": "calculator",
+                            "arguments": {
+                                "operation": "add",
+                                "left": 1,
+                                "right": 2,
+                            },
+                        }
+                    ],
+                    "usage": {"input_tokens": 10, "output_tokens": 5},
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "3"}],
+                    "usage": {"input_tokens": 20, "output_tokens": 1},
+                },
+            ]
+        )
+        agent = Agent(
+            model,
+            tools=[calculator_tool],
+            budget=AgentBudget(max_total_tokens=15),
+        )
+
+        with self.assertRaises(BudgetExceededError):
+            list(agent.run("1+2"))
+
+        self.assertEqual(model.calls, 1)
+        self.assertEqual(len(agent.context.messages), 3)
+
+    def test_budget_uses_configurable_currency_and_prices(self) -> None:
+        tracker = BudgetTracker(
+            AgentBudget(
+                max_cost=3,
+                pricing=TokenPricing(
+                    currency="CNY",
+                    input_per_million=1,
+                    output_per_million=2,
+                    cache_read_per_million=0.1,
+                    cache_write_per_million=1.25,
+                ),
+            )
+        )
+
+        totals = tracker.record(
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 500_000,
+                "cache_read_input_tokens": 100_000,
+                "cache_creation_input_tokens": 50_000,
+            }
+        )
+
+        self.assertEqual(totals["total_tokens"], 1_650_000)
+        self.assertAlmostEqual(totals["estimated_cost"], 2.0725)
+        self.assertEqual(totals["currency"], "CNY")
 
 
 if __name__ == "__main__":

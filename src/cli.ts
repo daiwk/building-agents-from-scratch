@@ -45,6 +45,19 @@ try {
           stdout.write(event.delta);
           receivedTextDelta = true;
         }
+        if (event.type === "usage") {
+          if (receivedTextDelta) {
+            stdout.write("\n");
+            receivedTextDelta = false;
+          }
+          const cost =
+            event.totals.estimatedCost === undefined
+              ? ""
+              : ` · estimated ${event.totals.currency} ${event.totals.estimatedCost.toFixed(6)}`;
+          console.log(
+            `  ↳ usage ${event.totals.totalTokens} tokens${cost}`,
+          );
+        }
         if (event.type === "agentEnd" && receivedTextDelta) {
           stdout.write("\n\n");
         }

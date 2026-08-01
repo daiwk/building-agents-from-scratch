@@ -6,6 +6,7 @@ import type {
   ToolCallBlock,
   ToolResultMessage,
 } from "./types.js";
+import type { AgentBudget } from "./types.js";
 import {
   callModelWithPolicy,
   streamModelWithPolicy,
@@ -13,6 +14,10 @@ import {
 } from "./model-call.js";
 import type { ContextBuilder } from "./context-builder.js";
 import { validateToolInput } from "./tool-validation.js";
+import {
+  BudgetTracker,
+  BudgetUsageUnavailableError,
+} from "./budget.js";
 
 export type AgentLoopOptions = {
   // 最多允许调用模型多少次，防止模型和工具无限互相调用。
@@ -25,6 +30,8 @@ export type AgentLoopOptions = {
   modelCall?: ModelCallPolicy;
   // contextBuilder 只裁剪本轮模型输入，不删除 Agent 保存的完整消息历史。
   contextBuilder?: ContextBuilder;
+  // budget 每次 agentLoop() 独立累计，防止一次任务无限消耗 token/成本。
+  budget?: AgentBudget;
 };
 
 export type AgentHooks = {
@@ -56,6 +63,7 @@ export async function* agentLoop(
   options: AgentLoopOptions = {},
 ): AsyncGenerator<AgentEvent, AssistantMessage> {
   const maxTurns = options.maxTurns ?? 8;
+  const budget = new BudgetTracker(options.budget);
   let lastMessage: AssistantMessage | undefined;
 
   // yield 只是在广播事件，不会结束函数。
@@ -64,6 +72,8 @@ export async function* agentLoop(
   // 一轮（turn）= 调用一次模型 + 执行这次模型要求的全部工具。
   for (let turn = 1; turn <= maxTurns; turn += 1) {
     throwIfAborted(options.signal);
+    // usage 只能在上一次响应结束后得到，因此预算在启动下一次模型调用前拦截。
+    budget.assertCanStartModelCall();
     yield { type: "turnStart", turn };
     // `?.` 称为可选链：hook 存在才调用，不存在就跳过。
     await options.hooks?.beforeModel?.(context);
@@ -105,6 +115,16 @@ export async function* agentLoop(
     lastMessage = assistant;
     context.messages.push(assistant);
     yield { type: "message", message: assistant };
+    if (assistant.usage) {
+      yield {
+        type: "usage",
+        usage: assistant.usage,
+        totals: budget.record(assistant.usage),
+      };
+    } else if (budget.requiresUsage) {
+      // 完整 assistant 已进入历史，但没有 usage 时无法可信地继续受限任务。
+      throw new BudgetUsageUnavailableError();
+    }
 
     // 将完整消息拆成更适合 UI 消费的细粒度事件。
     if (!streamed) {

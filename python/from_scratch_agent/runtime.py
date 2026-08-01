@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from .agent import Agent
+from .budget import AgentBudget, TokenPricing
 from .memory import JsonFileConversationStore
 from .minimax import MiniMaxProvider
 from .registry import create_builtin_tool_registry
@@ -68,6 +69,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         "你是一个简洁、可靠的助手。"
         "需要精确计算或当前时间时，必须使用工具。"
     )
+    budget = _create_budget_from_env()
     return Agent(
         model=model,
         tools=tools,
@@ -91,6 +93,57 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         memory_store=memory_store,
         session_id=session_id
         or os.environ.get("AGENT_SESSION_ID", "python-cli"),
+        budget=budget,
+    )
+
+
+def _create_budget_from_env() -> AgentBudget | None:
+    """只有出现预算上限时才启用计量；单独填写价格不会改变运行行为。"""
+
+    limit_names = (
+        "AGENT_MAX_INPUT_TOKENS",
+        "AGENT_MAX_OUTPUT_TOKENS",
+        "AGENT_MAX_TOTAL_TOKENS",
+        "AGENT_MAX_COST",
+    )
+    if not any(os.environ.get(name, "").strip() for name in limit_names):
+        return None
+
+    input_rate = _read_optional_float(
+        "AGENT_INPUT_COST_PER_MILLION_TOKENS"
+    )
+    output_rate = _read_optional_float(
+        "AGENT_OUTPUT_COST_PER_MILLION_TOKENS"
+    )
+    if (input_rate is None) != (output_rate is None):
+        raise ValueError("输入和输出 token 单价必须一起配置")
+
+    pricing = None
+    if input_rate is not None and output_rate is not None:
+        currency = os.environ.get("AGENT_COST_CURRENCY", "").strip()
+        if not currency:
+            raise ValueError("成本计量需要 AGENT_COST_CURRENCY")
+        pricing = TokenPricing(
+            currency=currency,
+            input_per_million=input_rate,
+            output_per_million=output_rate,
+            cache_read_per_million=_read_optional_float(
+                "AGENT_CACHE_READ_COST_PER_MILLION_TOKENS"
+            ),
+            cache_write_per_million=_read_optional_float(
+                "AGENT_CACHE_WRITE_COST_PER_MILLION_TOKENS"
+            ),
+        )
+    max_cost = _read_optional_float("AGENT_MAX_COST")
+    if max_cost is not None and pricing is None:
+        raise ValueError("AGENT_MAX_COST 需要币种及输入/输出 token 单价")
+
+    return AgentBudget(
+        max_input_tokens=_read_optional_int("AGENT_MAX_INPUT_TOKENS"),
+        max_output_tokens=_read_optional_int("AGENT_MAX_OUTPUT_TOKENS"),
+        max_total_tokens=_read_optional_int("AGENT_MAX_TOTAL_TOKENS"),
+        max_cost=max_cost,
+        pricing=pricing,
     )
 
 
@@ -114,3 +167,17 @@ def _read_non_negative_int(name: str, fallback: int) -> int:
     if not value.is_integer():
         raise ValueError(f"{name} 必须是整数")
     return int(value)
+
+
+def _read_optional_float(name: str) -> float | None:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    return _read_non_negative_float(name, 0)
+
+
+def _read_optional_int(name: str) -> int | None:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return None
+    return _read_non_negative_int(name, 0)

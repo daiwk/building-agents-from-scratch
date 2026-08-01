@@ -62,6 +62,17 @@ describe("web server", () => {
     expect(events).toContainEqual({ type: "textDelta", delta: "测试" });
     expect(events).toContainEqual({ type: "textDelta", delta: "回答" });
     expect(events.some((event) => event.type === "text")).toBe(false);
+    expect(events).toContainEqual({
+      type: "usage",
+      usage: { input: 3, output: 2 },
+      totals: {
+        inputTokens: 3,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 5,
+      },
+    });
     expect(events.some((event) => event.type === "agentEnd")).toBe(true);
   });
 
@@ -118,6 +129,7 @@ async function startTestServer() {
         role: "assistant",
         content: [{ type: "text", text: "测试回答" }],
         stopReason: "stop",
+        usage: { input: 3, output: 2 },
       };
     },
     async *stream() {
@@ -127,6 +139,7 @@ async function startTestServer() {
         role: "assistant",
         content: [{ type: "text", text: "测试回答" }],
         stopReason: "stop",
+        usage: { input: 3, output: 2 },
       };
     },
   };

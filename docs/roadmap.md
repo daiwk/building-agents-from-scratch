@@ -27,7 +27,7 @@
 - ~~`ModelProvider.stream()`~~（不支持时自动回退 `generate()`）；
 - ~~text/thinking/tool-argument delta~~；
 - ~~timeout、指数退避~~、限流；
-- token/cost budget；
+- ~~token/cost budget~~（每次 run 累计，并在下一次模型调用前拦截）；
 - ~~JSON Schema 基础参数校验~~（复杂 Schema 后续接成熟 validator）；
 - 并行工具执行策略；
 - OpenTelemetry-compatible trace。
@@ -38,6 +38,11 @@ MiniMax 国内接口已使用 SSE 实现真正的 token streaming。delta 只作
 `AgentEvent` 发给 CLI/Web UI；provider 收到 `message_stop` 并组装出完整
 `AssistantMessage` 后，Agent loop 才写入 history。首个可见 delta 之前的临时失败可以
 retry；首个 delta 之后不自动 retry，避免用户看到重复片段。
+
+`BudgetTracker` 已能累计 input、output、cache read 和 cache write token，并按用户配置的
+币种与单价估算成本；项目不硬编码 MiniMax 套餐价格。预算是 soft boundary：usage 在响应
+结束后才可得，因此可能越过上限一次，但不会再开始下一次模型调用。CLI 和 Web UI 都会
+收到 `usage` 事件，Python 和 pi-agent 对照版也使用相同的配置与运行边界。
 
 ## Stage 2：Memory
 
