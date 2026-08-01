@@ -195,6 +195,8 @@ src/
 │   └── scheduler.ts       # 有界并行 multi-agent
 ├── graph/
 │   └── runtime.ts         # node/edge/checkpoint/reducer/interrupt
+├── evolution/
+│   └── runtime.ts         # eval/holdout/approval/monitor/rollback
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
@@ -212,8 +214,9 @@ mkdocs.yml
 ```
 
 Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory、分类 MemoryIndex、
-版本化 SKILL.md、模型调用
-可靠性、单次任务预算和 OpenTelemetry-compatible trace。
+版本化 SKILL.md、模型调用可靠性、单次任务预算和 OpenTelemetry-compatible trace。
+Stage 6 的 EvolutionController 同时提供 TypeScript/Python 实现；pi-agent 可通过隔离的
+system prompt 实例参与相同 evaluator。
 三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
 覆盖工具、记忆和技能配置。详见文档站的“三种实现”章节。
 
@@ -236,6 +239,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory�
 - 调用可追踪：run、model、tool 形成父子 span，默认不记录 prompt 和工具参数。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
 - 高级能力外置：memory、skills、观测和策略通过 hooks 或 context 变换实现。
+- 演进受控：模型只能提出版本化候选，eval gate 和人工审批通过后才能发布。
 - 默认安全：本机 CLI 后端使用只读 sandbox；示例工具不执行 shell、不写文件。
 
 ## 下一步怎么扩展
@@ -243,9 +247,8 @@ Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory�
 详细路线见 [`docs/roadmap.md`](docs/roadmap.md)，接口关系见
 [`docs/architecture.md`](docs/architecture.md)。
 
-推荐迭代顺序：
-
-1. eval + versioned artifacts + approval gate，实现受控 self-evolve。
+Stage 0–6 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
+ArtifactStore、组织审批系统、经过人工标注验证的 LLM judge，以及发布后的在线监控。
 
 ## 验证
 
@@ -272,6 +275,7 @@ Web NDJSON 事件流。
 - 工具参数校验只实现教学所需的 JSON Schema 子集，复杂 Schema 应接成熟 validator。
 - 会话、摘要和分类 MemoryIndex 已有教学实现；embedding 与供应商 tokenizer 需通过接口接入。
 - 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
-- 人工审批和正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。
+- Stage 6 已提供程序化人工 gate；真实身份认证、审批 UI 和权限系统需由宿主应用接入。
+- 正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。
 
 这些不是被隐藏的缺陷，而是后续章节各自清晰的练习边界。

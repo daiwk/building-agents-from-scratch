@@ -307,6 +307,69 @@ print("恢复：", resumed)
     ),
     markdown(
         """
+## Stage 6：受控 Self-evolve
+
+模型不能直接改线上 prompt。下面用固定的 eval/holdout、二元评分和人工 gate 演示完整闭环；
+假 evaluator 不调用网络，因此每次运行结果一致。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import (
+    ArtifactVersion,
+    EvalCase,
+    EvalSampleResult,
+    EvolutionController,
+    InMemoryArtifactStore,
+)
+
+artifact_store = InMemoryArtifactStore()
+artifact_store.put(ArtifactVersion(
+    "assistant-prompt", "prompt", 1, "旧 prompt", "2026-01-01T00:00:00Z"
+))
+artifact_store.activate("assistant-prompt", 1)
+
+eval_dataset = [
+    EvalCase("public-1", "公开问题", "eval"),
+    EvalCase("hidden-1", "隐藏问题", "holdout"),
+]
+
+def offline_evaluator(artifact, test_case):
+    passed = artifact.version == 2
+    return EvalSampleResult(
+        output="正确回答" if passed else "失败回答",
+        passed=passed,
+        safety_passed=True,
+        tokens=10,
+        cost=0.01,
+        latency_ms=20,
+    )
+
+evolution = EvolutionController(
+    artifact_store, eval_dataset, offline_evaluator
+)
+candidate = evolution.propose(
+    "assistant-prompt", "prompt", "改进后的 prompt",
+    "修复失败样例", ["trace-notebook-1"],
+)
+evaluated = evolution.evaluate(candidate.id)
+print("Gate：", evaluated.report.gate_passed, evaluated.report.gate_reasons)
+"""
+    ),
+    code(
+        """
+evolution.approve(candidate.id, "human-reviewer", "人工抽查通过")
+evolution.publish(candidate.id, "release-owner")
+print("发布版本：", artifact_store.get_active("assistant-prompt").version)
+print("发布后监控：", evolution.monitor_active("assistant-prompt").report.gate_passed)
+
+evolution.rollback("assistant-prompt", 1, "on-call")
+print("回滚版本：", artifact_store.get_active("assistant-prompt").version)
+print("审计记录：", evolution.release_history())
+"""
+    ),
+    markdown(
+        """
 ### 7. 可选：调用真实 MiniMax
 
 只有同时设置 `MINIMAX_API_KEY` 和 `RUN_LIVE_MINIMAX=1` 才会真正请求网络。这样重新执行

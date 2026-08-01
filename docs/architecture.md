@@ -79,6 +79,20 @@ classDiagram
       +addEdge(from, to, condition)
       +run(state)
     }
+    class EvolutionController {
+      +propose(candidate)
+      +evaluate(candidateId)
+      +approve(candidateId, actor)
+      +publish(candidateId, actor)
+      +monitorActive(artifactId)
+      +rollback(artifactId, version, actor)
+    }
+    class ArtifactStore {
+      <<interface>>
+      +put(version)
+      +getActive(artifactId)
+      +activate(artifactId, version)
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
@@ -92,6 +106,8 @@ classDiagram
     Agent --> SubagentScheduler
     SubagentScheduler --> Agent
     StateGraph --> Agent
+    EvolutionController --> ArtifactStore
+    EvolutionController ..> Agent : isolated eval
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool
@@ -193,3 +209,6 @@ parent model → call research_agent tool
 3. 给文件、网络和 shell 工具设置独立 sandbox；
 4. 用 `maxTurns`、timeout、token/cost budget 控制资源；
 5. self-evolve 只生成版本化候选物，由 eval 和人工 gate 决定是否启用。
+
+`EvolutionController` 位于 Agent loop 外层。它不能修改正在运行的 Agent，只能比较固定数据集
+上的 baseline/candidate，在 gate 和人工审批都通过后切换 `ArtifactStore` 的 active version。

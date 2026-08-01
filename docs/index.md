@@ -63,6 +63,6 @@ Agent 和普通聊天的关键区别不是 system prompt，而是上图中最后
 - 一个直接使用 `@earendil-works/pi-agent-core` 的对照示例；
 - 一个能看见 model、tool call、tool result 和完成状态的 Web UI；
 - 可按名称授权的 ToolRegistry、可持久化 ConversationStore 和 SKILL.md loader；
-- 从 memory 到 self-evolve 的渐进式扩展路线。
+- 从 memory、sub-agent、graph 到受控 self-evolve 的完整扩展路线。
 
 [5 分钟跑起来 :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
