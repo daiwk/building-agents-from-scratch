@@ -5,7 +5,7 @@
  * - from scratch：src/core/agent-loop.ts（我们自己写循环）
  * - pi-agent：本文件（循环、参数校验、流式事件由库提供）
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 import { pathToFileURL } from "node:url";
@@ -39,6 +39,8 @@ import {
 import type { HandoffResult } from "../src/subagents/index.js";
 import { createWorkspaceToolKit } from "../src/workspace/index.js";
 import { createMcpClientFromEnvironment, type McpClient } from "../src/mcp/index.js";
+import { HybridRetriever, createKnowledgeSearchTool, type SourceDocument } from "../src/retrieval/index.js";
+import type { Artifact } from "../src/artifacts/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -171,6 +173,14 @@ export async function createPiAgent(
       },
     });
   };
+  // 可选 JSON 文档集让 pi-agent 直接复用与 from-scratch 版相同的引用检索工具。
+  const knowledgeFile = process.env.AGENT_KNOWLEDGE_FILE?.trim();
+  if (knowledgeFile) {
+    const documents = JSON.parse(readFileSync(knowledgeFile, "utf8")) as SourceDocument[];
+    const retriever = new HybridRetriever();
+    await retriever.ingest(documents);
+    adaptCoreTool(createKnowledgeSearchTool(retriever));
+  }
   const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
   if (workspaceRoot) {
     const workspaceTools = createWorkspaceToolKit({
@@ -413,6 +423,23 @@ export async function closePiAgentResources(agent: PiAgent): Promise<void> {
   if (!client) return;
   piMcpClients.delete(agent);
   await client.close();
+}
+
+/** pi-agent 原生接收 ImageContent；这里把同一 Artifact 数据形状适配过去。 */
+export async function promptPiAgentWithArtifacts(
+  agent: PiAgent,
+  text: string,
+  artifacts: readonly Artifact[],
+): Promise<void> {
+  const images = artifacts.filter((item) => item.mimeType.startsWith("image/")).map((item) => ({
+    type: "image" as const,
+    data: item.data.toString("base64"),
+    mimeType: item.mimeType,
+  }));
+  const textFiles = artifacts.filter((item) => !item.mimeType.startsWith("image/")).map((item) =>
+    `<uploaded_file name="${item.name}">\n${item.data.toString("utf8")}\n</uploaded_file>`
+  );
+  await agent.prompt([text, ...textFiles].filter(Boolean).join("\n\n"), images);
 }
 
 export interface PiHandoffOptions {

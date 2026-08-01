@@ -11,6 +11,7 @@ import type {
   ModelProvider,
   Tool,
   ToolExecutionMode,
+  UserContent,
 } from "./types.js";
 import type { ModelCallPolicy } from "./model-call.js";
 import type { AgentMemoryOptions } from "./memory.js";
@@ -73,7 +74,7 @@ export class Agent {
   }
 
   async *run(
-    input: string,
+    input: UserContent,
     options: AgentLoopOptions = {},
   ): AsyncGenerator<AgentEvent, AssistantMessage> {
     // 首次运行时再异步加载 memory，constructor 因而仍保持同步、容易使用。

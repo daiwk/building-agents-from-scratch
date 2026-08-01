@@ -269,6 +269,8 @@ mkdocs.yml
 
 Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory、分类 MemoryIndex、
 版本化 SKILL.md、模型调用可靠性、单次任务预算和 OpenTelemetry-compatible trace。
+Stage 13–14 还加入了带引用的混合检索、受限文件 Artifact 和图片 content block；
+Web UI 可以直接上传文本或图片并观察它们如何进入模型消息。
 Stage 6 的 EvolutionController 同时提供 TypeScript/Python 实现；pi-agent 可通过隔离的
 system prompt 实例参与相同 evaluator。
 三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
@@ -301,7 +303,7 @@ system prompt 实例参与相同 evaluator。
 详细路线见 [`docs/roadmap.md`](docs/roadmap.md)，接口关系见
 [`docs/architecture.md`](docs/architecture.md)。
 
-Stage 0–12 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
+Stage 0–14 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
 ArtifactStore、组织审批系统、经过人工标注验证的 LLM judge，以及发布后的在线监控。
 
 ## 验证
@@ -327,7 +329,8 @@ Web NDJSON 事件流。
 
 - TypeScript MiniMax 已支持 streaming；Python 教学 provider 仍保持同步完整响应。
 - 工具参数校验只实现教学所需的 JSON Schema 子集，复杂 Schema 应接成熟 validator。
-- 会话、摘要和分类 MemoryIndex 已有教学实现；embedding 与供应商 tokenizer 需通过接口接入。
+- 会话、摘要、分类 MemoryIndex 和 hybrid retrieval 已有教学实现；真实 embedding 与供应商 tokenizer 需通过接口接入。
+- 上传 Artifact 当前只存在内存中；生产部署前必须补认证、租户隔离、扫描与对象存储。
 - 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
 - Stage 6 已提供程序化人工 gate；真实身份认证、审批 UI 和权限系统需由宿主应用接入。
 - 正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。

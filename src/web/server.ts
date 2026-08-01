@@ -9,6 +9,8 @@ import { extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { Agent } from "../core/index.js";
+import type { UserContentBlock } from "../core/index.js";
+import { InMemoryArtifactStore } from "../artifacts/index.js";
 import {
   createAgentFromEnv,
   getProviderName,
@@ -26,6 +28,7 @@ type WebServerOptions = {
 type ChatBody = {
   message?: unknown;
   sessionId?: unknown;
+  artifactIds?: unknown;
 };
 
 const MIME_TYPES: Record<string, string> = {
@@ -40,6 +43,7 @@ export function createWebServer(options: WebServerOptions = {}): Server {
   const sessions = new Map<string, Agent>();
   // Set 只记录正在运行的 id，防止一个会话同时修改同一份消息历史。
   const activeSessions = new Set<string>();
+  const artifacts = new InMemoryArtifactStore();
   const makeAgent = options.createAgent ?? createAgentFromEnv;
   const providerName = options.providerName ?? getProviderName();
   const webRoot = options.webRoot ?? resolve(process.cwd(), "web");
@@ -60,6 +64,31 @@ export function createWebServer(options: WebServerOptions = {}): Server {
         const demo = typeof body.demo === "string" ? body.demo : "";
         return sendJson(response, 200, await runPlaygroundDemo(demo));
       }
+      if (request.method === "POST" && url.pathname === "/api/artifacts") {
+        const body = await readJson(request, 3 * 1024 * 1024);
+        if (typeof body.name !== "string" || typeof body.mimeType !== "string" ||
+            typeof body.dataBase64 !== "string") {
+          return sendJson(response, 400, { error: "name, mimeType and dataBase64 are required." });
+        }
+        if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(body.dataBase64)) {
+          return sendJson(response, 400, { error: "dataBase64 is invalid." });
+        }
+        const data = Buffer.from(body.dataBase64, "base64");
+        const artifact = artifacts.create(body.name, body.mimeType, data);
+        return sendJson(response, 201, artifacts.metadata(artifact));
+      }
+      const artifactMatch = url.pathname.match(/^\/api\/artifacts\/([\w-]+)$/);
+      if (request.method === "GET" && artifactMatch) {
+        const artifact = artifacts.get(artifactMatch[1]!);
+        if (!artifact) return sendJson(response, 404, { error: "Artifact not found." });
+        response.writeHead(200, {
+          "content-type": artifact.mimeType,
+          "content-length": artifact.size,
+          "content-disposition": `inline; filename="${artifact.name.replace(/["\\]/g, "_")}"`,
+          "cache-control": "private, no-store",
+        });
+        return response.end(artifact.data);
+      }
       if (request.method === "POST" && url.pathname === "/api/chat") {
         return await handleChat(
           request,
@@ -68,6 +97,7 @@ export function createWebServer(options: WebServerOptions = {}): Server {
           activeSessions,
           makeAgent,
           providerName,
+          artifacts,
         );
       }
       if (request.method === "POST" && url.pathname === "/api/reset") {
@@ -107,10 +137,27 @@ async function handleChat(
   activeSessions: Set<string>,
   makeAgent: (sessionId?: string) => Agent,
   providerName: string,
+  artifacts: InMemoryArtifactStore,
 ): Promise<void> {
   const body = (await readJson(request)) as ChatBody;
   const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) return sendJson(response, 400, { error: "Message is required." });
+  const artifactIds = Array.isArray(body.artifactIds)
+    ? body.artifactIds.filter((id): id is string => typeof id === "string") : [];
+  if (artifactIds.length > 4) return sendJson(response, 400, { error: "At most 4 artifacts are allowed." });
+  if (!message && !artifactIds.length) return sendJson(response, 400, { error: "Message or artifact is required." });
+  const content: string | UserContentBlock[] = artifactIds.length
+    ? [
+        ...(message ? [{ type: "text" as const, text: message }] : []),
+        ...artifactIds.map((id): UserContentBlock => {
+          const artifact = artifacts.get(id);
+          if (!artifact) throw new Error(`Artifact not found: ${id}`);
+          if (artifact.mimeType.startsWith("image/")) return {
+            type: "image", source: { type: "base64", mediaType: artifact.mimeType, data: artifact.data.toString("base64") },
+          };
+          return { type: "text", text: `\n<uploaded_file name="${artifact.name}">\n${artifact.data.toString("utf8")}\n</uploaded_file>` };
+        }),
+      ]
+    : message;
 
   const requestedId =
     typeof body.sessionId === "string" ? body.sessionId.trim() : "";
@@ -148,7 +195,7 @@ async function handleChat(
 
   writeNdjson(response, { type: "session", sessionId, provider: providerName });
   try {
-    for await (const event of agent.run(message, {
+    for await (const event of agent.run(content, {
       signal: controller.signal,
     })) {
       // UI 只需要可观察的控制流，不发送内部 thinking 和重复的完整 assistant 消息。
@@ -193,13 +240,13 @@ function serveStatic(
   }
 }
 
-function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+function readJson(request: IncomingMessage, maxBytes = 64 * 1024): Promise<Record<string, unknown>> {
   return new Promise((resolveBody, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
     request.on("data", (chunk: Buffer) => {
       size += chunk.length;
-      if (size > 64 * 1024) {
+      if (size > maxBytes) {
         reject(new Error("Request body is too large."));
         request.destroy();
         return;

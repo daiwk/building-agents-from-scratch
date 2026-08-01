@@ -120,5 +120,10 @@ Stage 10 的 MCP 工具也先进入同一个 core `ToolRegistry`，再适配为 
 Structured Output/ModelRouter 与 Stage 12 的 DurableTaskStore 位于 Agent 外层，可包装
 pi-agent 的 `prompt()` 或把 pi-agent handoff 注册成 durable task handler，无需复制内部 loop。
 
+Stage 13 可以通过 `AGENT_KNOWLEDGE_FILE=knowledge.json` 加载带 id、title、text、uri 的
+文档数组，再在 `PI_AGENT_TOOLS` 中选择 `search_knowledge`。Stage 14 的
+`promptPiAgentWithArtifacts()` 会把同一个 ArtifactStore 中的图片适配为 pi-ai 原生
+`ImageContent`，文本文件则作为有明确边界的文字输入。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

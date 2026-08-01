@@ -84,6 +84,8 @@ from .subagents import (
 )
 from .tracing import JsonlTraceExporter, Span, SpanRecord, Tracer
 from .types import ModelProvider, Tool
+from .retrieval import HybridRetriever, SourceDocument, create_knowledge_search_tool
+from .artifacts import Artifact, InMemoryArtifactStore as InMemoryUploadArtifactStore
 from .workspace import (
     FileArtifact,
     InMemoryFileArtifactStore,
@@ -198,4 +200,9 @@ __all__ = [
     "run_subagent",
     "load_skills_from_directory",
     "load_local_env",
+    "HybridRetriever",
+    "SourceDocument",
+    "create_knowledge_search_tool",
+    "Artifact",
+    "InMemoryUploadArtifactStore",
 ]
