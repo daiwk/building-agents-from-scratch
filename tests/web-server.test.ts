@@ -46,6 +46,9 @@ describe("web server", () => {
       demos: { id: string }[];
     };
     expect(catalog.demos.map((item) => item.id)).toContain("evolution");
+    expect(catalog.demos.map((item) => item.id)).toEqual(expect.arrayContaining([
+      "mcp", "structured", "durable",
+    ]));
     const run = await fetch(`${baseUrl}/api/playground/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -53,6 +56,14 @@ describe("web server", () => {
     });
     const result = await run.json() as { id: string; result: { state: { total: number } } };
     expect(result).toMatchObject({ id: "graph", result: { state: { total: 23 } } });
+    const durable = await fetch(`${baseUrl}/api/playground/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ demo: "durable" }),
+    });
+    expect(await durable.json()).toMatchObject({
+      id: "durable", result: { status: "completed", result: { value: 10 } },
+    });
   });
 
   it("streams agent events as NDJSON", async () => {

@@ -12,6 +12,8 @@ Skill 版本和依赖解析，以及 Stage 4/5 的结构化 sub-agent handoff �
 Graph，同样不需要 API Key。
 最后的 Stage 6 单元格还会离线演示 candidate、eval/holdout、人工审批、发布和回滚。
 Stage 7/9 继续演示 deterministic trace replay、workspace 路径边界和长输出 artifact。
+Stage 10–12 再用离线 transport、脚本化模型和临时 SQLite 演示 MCP 白名单、JSON repair、
+model fallback 以及进程重启后的 durable task 恢复。
 
 ## 打开
 

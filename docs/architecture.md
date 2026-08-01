@@ -101,6 +101,26 @@ classDiagram
       +registry: ToolRegistry
       +artifacts: FileArtifactStore
     }
+    class McpClient {
+      +listTools()
+      +createRegistry()
+    }
+    class ModelRouter {
+      +generate(request, context)
+      +snapshotMetrics()
+    }
+    class StructuredOutput {
+      +generateStructured(model, schema)
+    }
+    class DurableTaskStore {
+      +enqueue(task)
+      +claim(worker)
+      +appendEvent(event)
+    }
+    class SqliteGraphCheckpointStore {
+      +load(id)
+      +save(id, checkpoint)
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
@@ -117,6 +137,11 @@ classDiagram
     EvolutionController --> ArtifactStore
     EvolutionController --> TraceReplayEvaluator
     WorkspaceToolKit --> ToolRegistry
+    McpClient --> ToolRegistry
+    ModelRouter --> ModelProvider
+    StructuredOutput --> ModelProvider
+    DurableTaskStore --> StateGraph
+    StateGraph --> SqliteGraphCheckpointStore
     EvolutionController ..> Agent : isolated eval
     AgentContext o-- Tool
     Agent --> AgentHooks

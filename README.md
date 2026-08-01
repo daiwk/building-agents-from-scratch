@@ -74,7 +74,8 @@ npm run web
 
 高级组件实验台位于
 [http://127.0.0.1:3000/playground.html](http://127.0.0.1:3000/playground.html)，
-不需要 API Key，可以逐步观察 Memory、Skills、Sub-agent、Graph、Eval 和 Workspace。
+不需要 API Key，可以逐步观察 Memory、Skills、Sub-agent、Graph、Eval、Workspace、MCP、
+Structured Output、模型路由和 Durable Runtime。
 
 如果更喜欢终端，也可以运行：
 
@@ -186,6 +187,22 @@ AGENT_PROVIDER=codex npm run dev
 若要让它成为真正的底层模型后端，下一步应接它的 app-server 协议，而不是套娃式
 CLI 调用。
 
+## MCP、Structured Output 与 Durable Runtime
+
+MCP server 由宿主显式配置，工具 discovery 后仍要经过白名单：
+
+```dotenv
+AGENT_MCP_COMMAND=node
+AGENT_MCP_ARGS=["path/to/server.js"]
+AGENT_MCP_SERVER_NAME=docs
+AGENT_MCP_TOOLS=lookup
+AGENT_TOOLS=calculator,docs__lookup
+```
+
+`src/structured-output/` 提供 JSON parse、递归校验和有限 repair；`src/routing/` 提供显式
+模型路由、fallback 及 generator/judge 隔离指标。`src/durable/` 使用 SQLite 保存 Graph
+checkpoint、幂等 task、worker lease 和 append-only events。
+
 ## 目录
 
 ```text
@@ -229,13 +246,17 @@ src/
 ├── workspace/
 │   ├── tools.ts           # 限定目录的安全文件工具
 │   └── artifacts.ts       # 长工具输出的分段存储
+├── mcp/                   # stdio MCP、白名单、超时取消与脱敏
+├── structured-output/     # JSON 校验与有限 repair
+├── routing/               # 模型选择、fallback 与隔离指标
+├── durable/               # SQLite checkpoint、task queue 与 events
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
 
 web/
 ├── index.html            # 零框架页面
-├── playground.html       # Stage 2–9 组件实验台
+├── playground.html       # Stage 2–12 组件实验台
 ├── styles.css
 └── app.js
 
@@ -280,7 +301,7 @@ system prompt 实例参与相同 evaluator。
 详细路线见 [`docs/roadmap.md`](docs/roadmap.md)，接口关系见
 [`docs/architecture.md`](docs/architecture.md)。
 
-Stage 0–9 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
+Stage 0–12 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
 ArtifactStore、组织审批系统、经过人工标注验证的 LLM judge，以及发布后的在线监控。
 
 ## 验证
@@ -310,5 +331,7 @@ Web NDJSON 事件流。
 - 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
 - Stage 6 已提供程序化人工 gate；真实身份认证、审批 UI 和权限系统需由宿主应用接入。
 - 正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。
+- MCP 当前覆盖 stdio tools；Resources、Prompts 与远程 transport 尚未接入。
+- Durable Runtime 面向单机 SQLite；分布式 worker 还需要 heartbeat 和 dead-letter queue。
 
 这些不是被隐藏的缺陷，而是后续章节各自清晰的练习边界。

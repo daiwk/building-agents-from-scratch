@@ -38,8 +38,11 @@ import {
 } from "../src/skills/index.js";
 import type { HandoffResult } from "../src/subagents/index.js";
 import { createWorkspaceToolKit } from "../src/workspace/index.js";
+import { createMcpClientFromEnvironment, type McpClient } from "../src/mcp/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
+
+const piMcpClients = new WeakMap<PiAgent, McpClient>();
 
 // Type.Object 同时生成运行时 JSON Schema 和 TypeScript 类型。
 const calculatorParameters = Type.Object({
@@ -153,27 +156,33 @@ export async function createPiAgent(
   const toolRegistry = new PiToolRegistry()
     .register(calculatorTool)
     .register(currentTimeTool);
+  const adaptCoreTool = (tool: import("../src/core/index.js").Tool) => {
+    toolRegistry.register({
+      name: tool.name,
+      label: tool.name,
+      description: tool.description,
+      parameters: Type.Unsafe(tool.inputSchema as any),
+      async execute(_toolCallId, params) {
+        const text = await tool.execute(
+          params as Record<string, import("../src/core/index.js").JsonValue>,
+          { messages: [] },
+        );
+        return { content: [{ type: "text" as const, text }], details: {} };
+      },
+    });
+  };
   const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
   if (workspaceRoot) {
     const workspaceTools = createWorkspaceToolKit({
       root: workspaceRoot,
       allowWrite: readBoolean("AGENT_WORKSPACE_ALLOW_WRITE", false),
     }).registry.list();
-    for (const tool of workspaceTools) {
-      toolRegistry.register({
-        name: tool.name,
-        label: tool.name,
-        description: tool.description,
-        parameters: Type.Unsafe(tool.inputSchema as any),
-        async execute(_toolCallId, params) {
-          const text = await tool.execute(
-            params as Record<string, import("../src/core/index.js").JsonValue>,
-            { messages: [] },
-          );
-          return { content: [{ type: "text", text }], details: {} };
-        },
-      });
-    }
+    for (const tool of workspaceTools) adaptCoreTool(tool);
+  }
+  const mcpClient = createMcpClientFromEnvironment();
+  if (mcpClient) {
+    const mcpTools = (await mcpClient.createRegistry()).list();
+    for (const tool of mcpTools) adaptCoreTool(tool);
   }
   const selectedTools = toolRegistry.select(
     readList("PI_AGENT_TOOLS", readList("AGENT_TOOLS", [
@@ -395,7 +404,15 @@ export async function createPiAgent(
     }
   });
 
+  if (mcpClient) piMcpClients.set(agent, mcpClient);
   return agent;
+}
+
+export async function closePiAgentResources(agent: PiAgent): Promise<void> {
+  const client = piMcpClients.get(agent);
+  if (!client) return;
+  piMcpClients.delete(agent);
+  await client.close();
 }
 
 export interface PiHandoffOptions {
@@ -485,6 +502,7 @@ export async function runPiAgentHandoff(
     if (timer) clearTimeout(timer);
     options.signal?.removeEventListener("abort", cancel);
     unsubscribe();
+    await closePiAgentResources(agent);
   }
 }
 
@@ -577,13 +595,17 @@ const isMain =
 
 if (isMain) {
   const agent = await createPiAgent();
-  if (process.argv.includes("--dry-run")) {
-    console.log(
-      `pi-agent ready · model=${agent.state.model.id} · tools=${agent.state.tools
-        .map((tool) => tool.name)
-        .join(",")}`,
-    );
-  } else {
-    await agent.prompt(process.argv.slice(2).join(" ") || "精确计算 1234 × 5678");
+  try {
+    if (process.argv.includes("--dry-run")) {
+      console.log(
+        `pi-agent ready · model=${agent.state.model.id} · tools=${agent.state.tools
+          .map((tool) => tool.name)
+          .join(",")}`,
+      );
+    } else {
+      await agent.prompt(process.argv.slice(2).join(" ") || "精确计算 1234 × 5678");
+    }
+  } finally {
+    await closePiAgentResources(agent);
   }
 }

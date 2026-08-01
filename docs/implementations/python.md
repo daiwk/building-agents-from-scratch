@@ -22,7 +22,10 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 15. `evolution.py`：版本化候选、eval gate、审批、发布与回滚；
 16. `evals.py`：JSONL dataset、trace replay 和 report store；
 17. `workspace.py`：限定目录的文件工具与 artifact；
-18. `cli.py`：终端交互外壳。
+18. `mcp.py`：stdio MCP、白名单、超时与脱敏；
+19. `structured_output.py` / `routing.py`：结构化结果与模型路由；
+20. `durable.py`：SQLite checkpoint、task queue 与 event store；
+21. `cli.py`：终端交互外壳。
 
 Stage 2/3 对照组件位于 `context_builder.py`、`memory_index.py` 和 `skills.py`：Python Agent
 现在也会在每次模型请求前调用 ContextBuilder，并支持 tokenizer、摘要、三类长期记忆、
@@ -31,6 +34,8 @@ BM25-like Skill 发现、版本和依赖解析。
 timeout 返回 cancelled 并停止等待；生产版应使用支持协作取消的 asyncio provider。
 `evolution.py` 对齐 Stage 6，并继续只使用 Python 标准库。Evaluator 是普通函数，因此可以
 接假模型、MiniMax、人工 rubric 或经过人工标注验证的 LLM judge。
+Stage 10–12 同样只依赖标准库：MCP 通过 `subprocess` stdio，结构化输出通过 `json` 和递归
+校验，durable store 使用 `sqlite3`。这些模块与 TypeScript 版保持相同的权限和恢复语义。
 
 ## 运行
 

@@ -5,9 +5,9 @@
 - `/`：真实模型对话与基础 Agent loop 轨迹；
 - `/playground.html`：无需 API Key 的高级组件实验台。
 
-实验台会运行真实 Memory、Skills、Sub-agent、Graph、Evolution、Trace Replay 和 Workspace
-组件，但使用固定输入与脚本化假模型。每一步输入、状态变化和最终结果都会展开显示，适合在
-阅读源码前建立直觉。
+实验台会运行真实 Memory、Skills、Sub-agent、Graph、Evolution、Trace Replay、Workspace、
+MCP、Structured Output/Router 和 Durable Runtime 组件，但使用固定输入与脚本化假模型。
+每一步输入、状态变化和最终结果都会展开显示，适合在阅读源码前建立直觉。
 
 运行：
 

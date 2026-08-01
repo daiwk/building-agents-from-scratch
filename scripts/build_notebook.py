@@ -434,6 +434,114 @@ with TemporaryDirectory() as workspace_directory:
     ),
     markdown(
         """
+## Stage 10：MCP 白名单
+
+下面使用内存 transport 模拟 MCP server。真实 stdio 只是替换 transport；discovery 结果仍需
+经过宿主 allowlist 才能进入 ToolRegistry。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import McpClient
+
+class NotebookMcpTransport:
+    def request(self, method, params, request_id=None):
+        if method == "initialize":
+            return {}
+        if method == "tools/list":
+            return {"tools": [
+                {"name": "lookup", "inputSchema": {"type": "object"}},
+                {"name": "admin", "inputSchema": {"type": "object"}},
+            ]}
+        return {"content": "ok", "token": "hidden"}
+    def notify(self, method, params=None):
+        pass
+    def close(self):
+        pass
+
+mcp_registry = McpClient(
+    "docs", NotebookMcpTransport(), ["lookup"]
+).create_registry()
+print("Agent 可见 MCP tools：", [tool.name for tool in mcp_registry.list()])
+print(mcp_registry.list()[0].execute({}))
+"""
+    ),
+    markdown(
+        """
+## Stage 11：Structured Output 与 Router
+
+第一份输出故意不是 JSON；repair 后仍要重新通过同一个宿主 Schema。模型 fallback 与
+generator/judge 指标也由普通 Python 对象显式管理。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import generate_structured, ModelRoute, ModelRouter
+
+class SequenceOutputModel:
+    name = "sequence"
+    def __init__(self, outputs):
+        self.outputs = list(outputs)
+    def generate(self, system_prompt, messages, tools):
+        value = self.outputs.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return {
+            "role": "assistant",
+            "content": [{"type": "text", "text": value}],
+            "usage": {"input": 2, "output": 1},
+        }
+
+structured = generate_structured(
+    SequenceOutputModel(["broken", '{"answer":"ok"}']),
+    "回答", [], {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": False,
+    },
+)
+router = ModelRouter([
+    ModelRoute("primary", SequenceOutputModel([RuntimeError("offline")])),
+    ModelRoute("fallback", SequenceOutputModel(["fallback ok"])),
+])
+routed = router.generate("回答", [], [], "summary", "generator")
+print("repair 次数：", structured.repair_attempts)
+print("route：", routed["routed_model"], router.snapshot_metrics())
+"""
+    ),
+    markdown(
+        """
+## Stage 12：Durable Task
+
+任务先写入 SQLite，再关闭并重新打开 store。第二个进程视角的 worker 仍能 claim、执行并
+读取完整事件日志。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import SqliteDurableTaskStore, DurableTaskRunner
+
+with TemporaryDirectory() as durable_directory:
+    durable_path = Path(durable_directory) / "runtime.sqlite"
+    first_store = SqliteDurableTaskStore(durable_path)
+    first_store.enqueue("double", {"value": 5}, "notebook-task")
+    first_store.close()
+
+    resumed_store = SqliteDurableTaskStore(durable_path)
+    runner = DurableTaskRunner(
+        resumed_store,
+        "worker-1",
+        {"double": lambda payload, context: {"value": payload["value"] * 2}},
+    )
+    durable_result = runner.run_next()
+    print(durable_result)
+    print([event.type for event in resumed_store.events("notebook-task")])
+    resumed_store.close()
+"""
+    ),
+    markdown(
+        """
 ### 7. 可选：调用真实 MiniMax
 
 只有同时设置 `MINIMAX_API_KEY` 和 `RUN_LIVE_MINIMAX=1` 才会真正请求网络。这样重新执行

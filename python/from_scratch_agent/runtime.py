@@ -1,5 +1,6 @@
 """把环境变量装配成 Python Agent，供 CLI 和二次开发复用。"""
 
+import json
 import os
 from math import isfinite
 from pathlib import Path
@@ -22,6 +23,7 @@ from .skills import (
 )
 from .tracing import JsonlTraceExporter, Tracer
 from .workspace import create_workspace_toolkit
+from .mcp import McpClient, StdioMcpTransport
 
 
 def load_local_env(file_path: str | Path = ".env") -> None:
@@ -64,6 +66,28 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
             workspace_root,
             allow_write=_read_bool("AGENT_WORKSPACE_ALLOW_WRITE", False),
         ).registry.list())
+    mcp_command = os.environ.get("AGENT_MCP_COMMAND", "").strip()
+    if mcp_command:
+        allowed_mcp_tools = _read_list("AGENT_MCP_TOOLS")
+        if not allowed_mcp_tools:
+            raise ValueError("AGENT_MCP_TOOLS 必须显式授权至少一个工具")
+        raw_args = os.environ.get("AGENT_MCP_ARGS", "[]")
+        mcp_args = json.loads(raw_args)
+        if not isinstance(mcp_args, list) or not all(
+            isinstance(item, str) for item in mcp_args
+        ):
+            raise ValueError("AGENT_MCP_ARGS 必须是 JSON 字符串数组")
+        mcp_client = McpClient(
+            os.environ.get("AGENT_MCP_SERVER_NAME", "mcp"),
+            StdioMcpTransport(
+                mcp_command,
+                mcp_args,
+                os.environ.get("AGENT_MCP_CWD") or None,
+            ),
+            allowed_mcp_tools,
+            _read_mcp_timeout_seconds(),
+        )
+        tool_registry.register_many(mcp_client.create_registry().list())
     tools = tool_registry.select(tool_names)
 
     skill_names = _read_list("AGENT_SKILLS")
@@ -155,6 +179,13 @@ def _read_tool_execution() -> str:
     if value not in {"sequential", "parallel"}:
         raise ValueError("AGENT_TOOL_EXECUTION 必须是 sequential 或 parallel")
     return value
+
+
+def _read_mcp_timeout_seconds() -> float:
+    milliseconds = _read_non_negative_float("AGENT_MCP_TIMEOUT_MS", 30_000)
+    if milliseconds <= 0:
+        raise ValueError("AGENT_MCP_TIMEOUT_MS 必须大于 0")
+    return milliseconds / 1000
 
 
 def _read_bool(name: str, fallback: bool) -> bool:

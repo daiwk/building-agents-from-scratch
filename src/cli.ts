@@ -1,7 +1,8 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import {
-  createAgentFromEnv,
+  createAgentFromEnvAsync,
+  closeRuntimeResources,
   getProviderName,
   loadLocalEnv,
 } from "./runtime/create-agent.js";
@@ -9,7 +10,7 @@ import {
 loadLocalEnv();
 
 const providerName = getProviderName();
-const agent = createAgentFromEnv(process.env.AGENT_SESSION_ID ?? "cli");
+const agent = await createAgentFromEnvAsync(process.env.AGENT_SESSION_ID ?? "cli");
 const readline = createInterface({ input: stdin, output: stdout });
 
 console.log(`from-scratch agent · provider=${providerName}`);
@@ -75,4 +76,5 @@ try {
   }
 } finally {
   readline.close();
+  await closeRuntimeResources();
 }
