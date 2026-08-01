@@ -22,7 +22,7 @@
 
 完成标准：初学者只读 `types.ts` 和 `agent-loop.ts` 就能解释 Agent 原理。
 
-## Stage 1：Streaming 与工程可靠性
+## Stage 1：Streaming 与工程可靠性（已完成）
 
 - ~~`ModelProvider.stream()`~~（不支持时自动回退 `generate()`）；
 - ~~text/thinking/tool-argument delta~~；
@@ -96,21 +96,21 @@ Catalog 白名单、去重、limit 和依赖解析。`AGENT_SKILLS=auto` 在三�
 动态选择。frontmatter 支持 version、dependencies、tags 和 tools；tools 只声明依赖，
 未在宿主白名单中的工具会报错，Skill 永远不能自行扩大权限。
 
-## Stage 4：Sub-agent 和 Multi-agent
+## Stage 4：Sub-agent 和 Multi-agent（已完成）
 
-`agentAsTool({ createAgent })` 已实现：父 Agent 可以把独立 task 委派给新建的 child，
-不共享可变 messages，并把父级取消信号向下传递。然后加入：
+`agentAsTool({ createAgent })` 与 `runSubagent()` 已实现：父 Agent 可以把独立 task 委派给
+新建的 child，不共享可变 messages，并得到 `HandoffResult`。已经加入：
 
-- 更完整的父子取消与超时传播；
-- depth、turn、token 和时间预算；
-- 只读或显式挑选的上下文传递；
-- 结构化 handoff result；
-- scheduler 管理并行子 Agent；
-- event bus 汇总轨迹。
+- ~~父子取消与超时传播~~；
+- ~~depth、turn、token 和时间预算~~；
+- ~~只读或显式挑选的上下文传递~~；
+- ~~结构化 handoff result~~；
+- ~~scheduler 管理并行子 Agent~~；
+- ~~event bus 汇总轨迹~~。
 
 不要默认让所有 Agent 共享同一个可变 message 数组。
 
-## Stage 5：Loop 与 Graph
+## Stage 5：Loop 与 Graph（已完成）
 
 当前 agent loop 是固定图：
 
@@ -118,15 +118,17 @@ Catalog 白名单、去重、limit 和依赖解析。`AGENT_SKILLS=auto` 在三�
 model → condition → tool → model
 ```
 
-通用 graph 应新增独立 runtime：
+通用 graph 已新增独立 runtime：
 
-- node：纯函数或 effect；
-- edge：根据 state 选择下一节点；
-- checkpoint：可恢复状态；
-- reducer：并行分支合并；
-- interrupt：人工输入与审批。
+- ~~node：纯函数或 effect~~；
+- ~~edge：根据 state 选择下一节点~~；
+- ~~checkpoint：可恢复状态~~；
+- ~~reducer：并行分支合并~~；
+- ~~interrupt：人工输入与审批~~。
 
 普通单 Agent 仍使用小循环；只有工作流确实需要分支、恢复或并行时才使用 graph。
+TypeScript 与 Python 的 `StateGraph` 使用同一语义：条件 edge 选择路径，fork 并行执行后由
+reducer 合并，checkpoint 保存下一节点，interrupt 返回可序列化值并从同一节点 resume。
 
 ## Stage 6：Self-evolve
 

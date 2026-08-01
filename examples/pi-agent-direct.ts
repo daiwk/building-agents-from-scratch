@@ -36,6 +36,7 @@ import {
   assertSkillToolsAvailable,
   loadSkillsFromDirectory,
 } from "../src/skills/index.js";
+import type { HandoffResult } from "../src/subagents/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -367,6 +368,92 @@ export async function createPiAgent(): Promise<PiAgent> {
   });
 
   return agent;
+}
+
+export interface PiHandoffOptions {
+  agentId: string;
+  parentAgentId?: string;
+  depth?: number;
+  maxDepth?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * 把 pi-agent 的 prompt 生命周期适配成教学版统一的 HandoffResult。
+ * 因而它既能作为 StateGraph node，也能交给 SubagentScheduler.runWorkers()。
+ */
+export async function runPiAgentHandoff(
+  task: string,
+  options: PiHandoffOptions,
+): Promise<HandoffResult> {
+  const started = Date.now();
+  const depth = options.depth ?? 1;
+  const maxDepth = options.maxDepth ?? 3;
+  if (depth < 0 || maxDepth < 0 || depth > maxDepth) {
+    throw new Error(`pi-agent depth ${depth} exceeds limit ${maxDepth}`);
+  }
+  if (options.timeoutMs !== undefined && options.timeoutMs < 0) {
+    throw new Error("pi-agent timeoutMs must be non-negative.");
+  }
+
+  const agent = await createPiAgent();
+  let turns = 0;
+  let totalTokens = 0;
+  let output = "";
+  let cancelled = options.signal?.aborted ?? false;
+  const unsubscribe = agent.subscribe((event) => {
+    if (event.type === "turn_start") turns += 1;
+    if (event.type === "message_end" && event.message.role === "assistant") {
+      totalTokens += event.message.usage.input + event.message.usage.output;
+      output = event.message.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+        .trim();
+    }
+  });
+  const cancel = () => {
+    cancelled = true;
+    agent.abort();
+  };
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  const timer = options.timeoutMs === undefined
+    ? undefined
+    : setTimeout(cancel, options.timeoutMs);
+
+  try {
+    if (!cancelled) await agent.prompt(task);
+    return {
+      status: cancelled ? "cancelled" : "completed",
+      task,
+      output: cancelled ? "" : output,
+      agentId: options.agentId,
+      ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}),
+      depth,
+      turns,
+      totalTokens,
+      durationMs: Date.now() - started,
+      ...(cancelled ? { error: "pi-agent handoff cancelled" } : {}),
+    };
+  } catch (error) {
+    return {
+      status: cancelled ? "cancelled" : "failed",
+      task,
+      output: "",
+      agentId: options.agentId,
+      ...(options.parentAgentId ? { parentAgentId: options.parentAgentId } : {}),
+      depth,
+      turns,
+      totalTokens,
+      durationMs: Date.now() - started,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+    options.signal?.removeEventListener("abort", cancel);
+    unsubscribe();
+  }
 }
 
 function loadPiSkillConfiguration() {

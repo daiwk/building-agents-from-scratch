@@ -59,6 +59,11 @@ AGENT_MEMORY_RECALL_LIMIT=5
 Skill frontmatter 支持 `version`、`dependencies`、`tags` 和 `tools`。auto 模式使用
 BM25-like 路由，也可注入 `ModelSkillRouter`；模型路由结果不能绕过 Catalog 和工具白名单。
 
+Stage 4/5 位于 `src/subagents/` 和 `src/graph/`。`runSubagent()` 统一 depth、turn、token、
+timeout、取消、上下文选择和结构化 handoff；scheduler/event bus 组合多个 child。
+`StateGraph` 独立提供条件 edge、fork/reducer、checkpoint 和 interrupt/resume，不影响
+基础 `agentLoop()` 的可读性。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；

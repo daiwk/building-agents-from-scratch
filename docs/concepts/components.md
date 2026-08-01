@@ -247,8 +247,8 @@ const parent = new Agent({ model, tools: [researcher] });
 
 每次 tool call 都通过 factory 创建新 child，因此不会共享父 Agent 或其他任务的可变
 messages。child 只收到结构化 `task`，父级取消信号会继续传递；child 的工具权限、
-memory 和 turn budget 都要显式配置。当前返回最终文本，结构化 handoff、depth/token
-budget 和并行 scheduler 仍留在后续阶段。
+memory 和预算都要显式配置。`runSubagent()` 返回结构化 handoff，`SubagentScheduler`
+负责有界并发，`AgentEventBus` 只汇总带父子 ID 的事件。
 
 ## 下一步扩展点
 
@@ -257,7 +257,7 @@ budget 和并行 scheduler 仍留在后续阶段。
 - ContextBuilder：接入具体 provider tokenizer 和摘要模型；
 - MemoryIndex：embedding、混合检索和 reranker；
 - SkillCatalog：远程 registry、签名与兼容性策略；
-- agentAsTool：结构化 handoff、深度预算和并行 scheduler。
+- orchestration：持久化 event bus、分布式 scheduler 和远程 worker。
 
 ## 三套实现的对应关系
 
@@ -269,4 +269,4 @@ budget 和并行 scheduler 仍留在后续阶段。
 | Skill | `SkillCatalog` | Python `SkillCatalog` | 复用 TypeScript loader/catalog |
 | Timeout/retry | `ModelCallPolicy` | Python `ModelCallPolicy` | pi-ai 原生 stream options |
 | Token/摘要 Context | `TokenContextBuilder` | `TokenContextBuilder` | pi-agent 原生 context + 通用 memory recall |
-| Sub-agent adapter | `agentAsTool` | 待对齐 | 待提供对照示例 |
+| Sub-agent / Graph | handoff、scheduler、`StateGraph` | 同语义同步实现 | 作为 graph node 或 scheduler worker |
