@@ -130,7 +130,7 @@ model → condition → tool → model
 TypeScript 与 Python 的 `StateGraph` 使用同一语义：条件 edge 选择路径，fork 并行执行后由
 reducer 合并，checkpoint 保存下一节点，interrupt 返回可序列化值并从同一节点 resume。
 
-## Stage 6：Self-evolve
+## Stage 6：Self-evolve（已完成）
 
 Self-evolve 不是让 Agent 直接改线上 prompt 或代码。安全闭环应为：
 
@@ -139,10 +139,15 @@ Self-evolve 不是让 Agent 直接改线上 prompt 或代码。安全闭环应�
 → 人工审批 → 版本化发布 → 可回滚监控
 ```
 
-候选物可以是 prompt、skill、tool description 或 routing policy。每种候选物都需要：
+候选物可以是 prompt、skill、tool description 或 routing policy。当前已经提供：
 
-- immutable version；
-- 固定 eval dataset；
-- 质量、成本、延迟和安全指标；
-- 防止针对 eval 过拟合的 holdout；
-- 明确的发布与回滚 gate。
+- ~~immutable version~~（同一 artifact/version 禁止覆盖）；
+- ~~固定 eval dataset~~（baseline 与 candidate 使用相同快照）；
+- ~~质量、成本、延迟、token 和安全指标~~；
+- ~~防止针对 eval 过拟合的 holdout~~；
+- ~~明确的人工审批、发布、发布后回归监控与回滚 gate~~。
+
+TypeScript 与 Python 的 `EvolutionController` 都要求候选关联失败 trace。模型可以生成
+candidate content 和 rationale，但不能调用 `approve()` 或 `publish()`；release gate 通过后
+仍需提供人工身份。`InMemoryArtifactStore` 是可观察的教学实现，生产环境应在同一接口后接
+数据库、制品仓库和组织自己的权限系统。

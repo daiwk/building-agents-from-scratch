@@ -104,5 +104,12 @@ Stage 4/5 是 Agent 外层的 orchestration：pi-agent 实例可以作为 schedu
 `HandoffResult`。可以直接在 graph node 中调用；需要有界并发时，把多个调用函数交给
 `SubagentScheduler.runWorkers()`，结果仍按输入顺序返回。
 
+## Stage 6 隔离评测
+
+`createPiAgent({ systemPrompt })` 和 `runPiAgentHandoff(..., { systemPrompt })` 接受版本化
+prompt artifact。Evaluator 可以为 baseline/candidate 分别创建新实例，读取 handoff 的输出、
+token 与耗时后生成二元 `EvalSampleResult`。版本、holdout、gate、人工审批和发布仍由
+`EvolutionController` 管理，pi-agent 本身不能切换 active version。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

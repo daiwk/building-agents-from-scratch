@@ -129,7 +129,9 @@ class PiToolRegistry {
 /**
  * 直接使用 pi-agent，但复用项目的 memory/skill 文件格式与环境变量语义。
  */
-export async function createPiAgent(): Promise<PiAgent> {
+export async function createPiAgent(
+  options: { systemPrompt?: string } = {},
+): Promise<PiAgent> {
   // pi-ai 已内置 MiniMax 国内 provider：
   // baseUrl=https://api.minimaxi.com/anthropic
   // 默认读取 MINIMAX_CN_API_KEY。
@@ -157,7 +159,10 @@ export async function createPiAgent(): Promise<PiAgent> {
     ])),
   );
   const skillConfiguration = loadPiSkillConfiguration();
-  const basePrompt = "你是一个可靠的助手；精确计算和当前时间必须使用工具。";
+  // Stage 6 的 prompt artifact 通过这个显式入口进入隔离评测实例，
+  // 不会修改已运行 Agent 的线上 prompt。
+  const basePrompt = options.systemPrompt ??
+    "你是一个可靠的助手；精确计算和当前时间必须使用工具。";
   const sessionId =
     process.env.PI_AGENT_SESSION_ID ??
     process.env.AGENT_SESSION_ID ??
@@ -377,6 +382,8 @@ export interface PiHandoffOptions {
   maxDepth?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** 用于 Stage 6 隔离评测的版本化 prompt，不会覆盖全局配置。 */
+  systemPrompt?: string;
 }
 
 /**
@@ -397,7 +404,9 @@ export async function runPiAgentHandoff(
     throw new Error("pi-agent timeoutMs must be non-negative.");
   }
 
-  const agent = await createPiAgent();
+  const agent = await createPiAgent(
+    options.systemPrompt ? { systemPrompt: options.systemPrompt } : {},
+  );
   let turns = 0;
   let totalTokens = 0;
   let output = "";

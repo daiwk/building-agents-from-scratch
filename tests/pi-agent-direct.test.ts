@@ -51,10 +51,11 @@ describe("pi-agent feature parity", () => {
     delete process.env.PI_AGENT_SESSION_ID;
     delete process.env.PI_AGENT_TOOL_EXECUTION;
 
-    const agent = await createPiAgent();
+    const agent = await createPiAgent({ systemPrompt: "候选版本 prompt" });
 
     expect(agent.state.tools.map((tool) => tool.name)).toEqual(["calculator"]);
     expect(agent.state.systemPrompt).toContain('<skill name="tool-first">');
+    expect(agent.state.systemPrompt).toContain("候选版本 prompt");
     expect(agent.state.messages).toHaveLength(1);
     expect(agent.state.messages[0]).toMatchObject({
       role: "user",

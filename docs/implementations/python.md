@@ -19,13 +19,16 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 12. `runtime.py`：统一读取环境变量；
 13. `subagents.py`：handoff、预算、event bus 与 scheduler；
 14. `graph.py`：独立状态图运行时；
-15. `cli.py`：终端交互外壳。
+15. `evolution.py`：版本化候选、eval gate、审批、发布与回滚；
+16. `cli.py`：终端交互外壳。
 
 Stage 2/3 对照组件位于 `context_builder.py`、`memory_index.py` 和 `skills.py`：Python Agent
 现在也会在每次模型请求前调用 ContextBuilder，并支持 tokenizer、摘要、三类长期记忆、
 BM25-like Skill 发现、版本和依赖解析。
 `subagents.py` 与 `graph.py` 对齐 Stage 4/5。Python 同步线程不能安全强杀阻塞函数，因此
 timeout 返回 cancelled 并停止等待；生产版应使用支持协作取消的 asyncio provider。
+`evolution.py` 对齐 Stage 6，并继续只使用 Python 标准库。Evaluator 是普通函数，因此可以
+接假模型、MiniMax、人工 rubric 或经过人工标注验证的 LLM judge。
 
 ## 运行
 

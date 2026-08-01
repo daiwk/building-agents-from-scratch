@@ -64,6 +64,10 @@ timeout、取消、上下文选择和结构化 handoff；scheduler/event bus 组
 `StateGraph` 独立提供条件 edge、fork/reducer、checkpoint 和 interrupt/resume，不影响
 基础 `agentLoop()` 的可读性。
 
+Stage 6 位于 `src/evolution/`。`EvolutionController` 把 propose、固定 eval/holdout 对比、
+人工 approve、publish 和 rollback 分开；`ArtifactStore` 与 `ArtifactEvaluator` 都可替换，
+不会把某个数据库、模型或 judge 藏进核心流程。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；
