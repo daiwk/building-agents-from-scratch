@@ -38,6 +38,23 @@ describe("web server", () => {
     expect(server.listening).toBe(true);
   });
 
+  it("serves the component playground and runs deterministic demos", async () => {
+    const { baseUrl } = await startTestServer();
+    const page = await fetch(`${baseUrl}/playground.html`);
+    expect(await page.text()).toContain("Component Lab");
+    const catalog = await (await fetch(`${baseUrl}/api/playground/demos`)).json() as {
+      demos: { id: string }[];
+    };
+    expect(catalog.demos.map((item) => item.id)).toContain("evolution");
+    const run = await fetch(`${baseUrl}/api/playground/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ demo: "graph" }),
+    });
+    const result = await run.json() as { id: string; result: { state: { total: number } } };
+    expect(result).toMatchObject({ id: "graph", result: { state: { total: 23 } } });
+  });
+
   it("streams agent events as NDJSON", async () => {
     const { baseUrl } = await startTestServer();
     const response = await fetch(`${baseUrl}/api/chat`, {

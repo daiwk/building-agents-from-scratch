@@ -37,7 +37,9 @@ describe("pi-agent feature parity", () => {
     store.close();
     process.env.MINIMAX_CN_API_KEY = "test-key";
     process.env.MINIMAX_MODEL = "MiniMax-M3";
-    process.env.AGENT_TOOLS = "calculator";
+    process.env.AGENT_TOOLS = "calculator,read_file";
+    process.env.AGENT_WORKSPACE_ROOT = directory;
+    process.env.AGENT_WORKSPACE_ALLOW_WRITE = "false";
     process.env.AGENT_SKILLS = "tool-first";
     process.env.AGENT_SKILLS_DIR = "skills";
     process.env.AGENT_MEMORY_DATABASE = memoryDatabase;
@@ -53,7 +55,8 @@ describe("pi-agent feature parity", () => {
 
     const agent = await createPiAgent({ systemPrompt: "候选版本 prompt" });
 
-    expect(agent.state.tools.map((tool) => tool.name)).toEqual(["calculator"]);
+    expect(agent.state.tools.map((tool) => tool.name)).toEqual(["calculator", "read_file"]);
+    expect(agent.state.tools.map((tool) => tool.name)).not.toContain("write_file");
     expect(agent.state.systemPrompt).toContain('<skill name="tool-first">');
     expect(agent.state.systemPrompt).toContain("候选版本 prompt");
     expect(agent.state.messages).toHaveLength(1);

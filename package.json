@@ -10,6 +10,7 @@
     "example": "tsx examples/quick-start.ts",
     "pi-example": "tsx examples/pi-agent-direct.ts",
     "pi-check": "tsx examples/pi-agent-direct.ts --dry-run",
+    "eval": "tsx src/evals/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test"

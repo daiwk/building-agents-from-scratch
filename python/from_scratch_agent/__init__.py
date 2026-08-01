@@ -41,6 +41,15 @@ from .evolution import (
     ReleaseRecord,
     compare_artifacts,
 )
+from .evals import (
+    JsonEvalReportStore,
+    JsonlEvalDatasetStore,
+    ReplayEvalCase,
+    TraceReplayEvaluator,
+    dataset_fingerprint,
+    report_to_dict,
+    to_eval_cases,
+)
 from .minimax import MiniMaxProvider
 from .memory_index import (
     InMemoryMemoryIndex,
@@ -75,6 +84,12 @@ from .subagents import (
 )
 from .tracing import JsonlTraceExporter, Span, SpanRecord, Tracer
 from .types import ModelProvider, Tool
+from .workspace import (
+    FileArtifact,
+    InMemoryFileArtifactStore,
+    WorkspaceToolKit,
+    create_workspace_toolkit,
+)
 
 __all__ = [
     "Agent",
@@ -135,6 +150,17 @@ __all__ = [
     "MonitoringRecord",
     "ReleaseRecord",
     "compare_artifacts",
+    "JsonEvalReportStore",
+    "JsonlEvalDatasetStore",
+    "ReplayEvalCase",
+    "TraceReplayEvaluator",
+    "dataset_fingerprint",
+    "report_to_dict",
+    "to_eval_cases",
+    "FileArtifact",
+    "InMemoryFileArtifactStore",
+    "WorkspaceToolKit",
+    "create_workspace_toolkit",
     "AgentEventBus",
     "HandoffResult",
     "SubagentScheduler",

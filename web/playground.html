@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="逐步观察 Memory、Skills、Sub-agent、Graph 与 Self-evolve。" />
+    <title>Agent Component Lab</title>
+    <link rel="stylesheet" href="/playground.css?v=stage-8" />
+  </head>
+  <body>
+    <header class="lab-header">
+      <a href="/" class="back-link">← 返回 Agent Loop</a>
+      <div class="lab-wordmark"><strong>Component Lab</strong><span>STAGE 02—09 / DETERMINISTIC</span></div>
+      <span class="offline-badge">离线实验</span>
+    </header>
+    <main class="lab-layout">
+      <aside class="specimen-index" aria-label="组件列表">
+        <p class="rail-label">选择一个组件</p>
+        <nav id="demo-list"></nav>
+      </aside>
+      <section class="lab-stage" aria-live="polite">
+        <div class="stage-heading">
+          <div><span id="stage-number">STAGE</span><h1 id="demo-title">加载实验台</h1></div>
+          <button id="run-demo" type="button" disabled>运行示例</button>
+        </div>
+        <p class="stage-deck" id="demo-description">所有示例使用固定输入，不访问模型网络。</p>
+        <div class="signal-track" id="signal-track">
+          <div class="lab-empty"><span>○</span><p>选择组件后运行，状态变化会沿信号轨道展开。</p></div>
+        </div>
+      </section>
+      <aside class="result-panel">
+        <span class="rail-label">最终状态</span>
+        <p id="result-summary">等待运行。</p>
+        <pre id="result-json">{}</pre>
+      </aside>
+    </main>
+    <template id="step-template">
+      <article class="signal-step"><span class="signal-node"></span><div><small></small><h2></h2><p></p><pre></pre></div></article>
+    </template>
+    <script src="/playground.js?v=stage-8" defer></script>
+  </body>
+</html>

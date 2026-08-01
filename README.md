@@ -72,6 +72,10 @@ npm run web
 浏览器访问 [http://127.0.0.1:3000](http://127.0.0.1:3000)。页面左侧是对话，
 右侧会按真实顺序展示 model、tool call、tool result 和最终回答。
 
+高级组件实验台位于
+[http://127.0.0.1:3000/playground.html](http://127.0.0.1:3000/playground.html)，
+不需要 API Key，可以逐步观察 Memory、Skills、Sub-agent、Graph、Eval 和 Workspace。
+
 如果更喜欢终端，也可以运行：
 
 ```bash
@@ -147,6 +151,28 @@ npm run pi-example -- "精确计算 1234 × 5678"
 pi-ai 的 `minimax-cn` provider 默认读取 `MINIMAX_CN_API_KEY`。为了和本项目其余入口一致，
 示例也接受 `MINIMAX_API_KEY` 并在进程内完成映射。
 
+## 离线 Eval 与 Workspace Tools
+
+运行随仓库提供的 baseline/candidate trace diff：
+
+```bash
+npm run eval -- run \
+  --dataset examples/evals/dataset.jsonl \
+  --baseline examples/evals/baseline.json \
+  --candidate examples/evals/candidate.json
+```
+
+给真实 Agent 开放限定目录的只读文件工具：
+
+```dotenv
+AGENT_WORKSPACE_ROOT=.
+AGENT_TOOLS=read_artifact,list_files,read_file,search_text
+AGENT_WORKSPACE_ALLOW_WRITE=false
+```
+
+只有同时设置 `AGENT_WORKSPACE_ALLOW_WRITE=true` 并在 `AGENT_TOOLS` 选择 `write_file`，
+模型才会看到写工具。项目不提供任意 shell 工具。
+
 ## 使用本机 Codex
 
 本机已登录相应 CLI 时：
@@ -197,12 +223,19 @@ src/
 │   └── runtime.ts         # node/edge/checkpoint/reducer/interrupt
 ├── evolution/
 │   └── runtime.ts         # eval/holdout/approval/monitor/rollback
+├── evals/
+│   ├── replay.ts          # 固定 trace 的离线重放
+│   └── cli.ts             # dataset diff 与 report
+├── workspace/
+│   ├── tools.ts           # 限定目录的安全文件工具
+│   └── artifacts.ts       # 长工具输出的分段存储
 ├── web/
 │   └── server.ts         # HTTP + NDJSON 事件流
 └── cli.ts
 
 web/
 ├── index.html            # 零框架页面
+├── playground.html       # Stage 2–9 组件实验台
 ├── styles.css
 └── app.js
 
@@ -247,7 +280,7 @@ system prompt 实例参与相同 evaluator。
 详细路线见 [`docs/roadmap.md`](docs/roadmap.md)，接口关系见
 [`docs/architecture.md`](docs/architecture.md)。
 
-Stage 0–6 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
+Stage 0–9 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
 ArtifactStore、组织审批系统、经过人工标注验证的 LLM judge，以及发布后的在线监控。
 
 ## 验证

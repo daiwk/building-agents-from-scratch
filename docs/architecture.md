@@ -93,6 +93,14 @@ classDiagram
       +getActive(artifactId)
       +activate(artifactId, version)
     }
+    class TraceReplayEvaluator {
+      +replay(artifact, case)
+      +asEvaluator()
+    }
+    class WorkspaceToolKit {
+      +registry: ToolRegistry
+      +artifacts: FileArtifactStore
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
@@ -107,6 +115,8 @@ classDiagram
     SubagentScheduler --> Agent
     StateGraph --> Agent
     EvolutionController --> ArtifactStore
+    EvolutionController --> TraceReplayEvaluator
+    WorkspaceToolKit --> ToolRegistry
     EvolutionController ..> Agent : isolated eval
     AgentContext o-- Tool
     Agent --> AgentHooks

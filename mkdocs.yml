@@ -43,6 +43,8 @@ nav:
       - Tools、Memory 与 Skills: concepts/components.md
       - Sub-agent 与 Graph: concepts/orchestration.md
       - 受控 Self-evolve: concepts/self-evolve.md
+      - Trace Replay 与 Evals: concepts/eval-replay.md
+      - 安全 Workspace Tools: concepts/workspace-tools.md
       - 架构说明: architecture.md
   - 三种实现:
       - 如何选择: implementations/index.md
