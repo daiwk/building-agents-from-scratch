@@ -130,6 +130,10 @@ Browser
 hook 可以改变 context，但不应该偷偷执行下一轮循环。控制流始终留在
 `agentLoop()`，这样调试时只有一个地方需要检查。
 
+并行工具模式也不改变这个边界：全部 `beforeTool` 先按顺序完成，工具执行阶段才并发；
+结果、`afterTool` 和 Context 写入恢复为原始 call 顺序。这样并行只影响耗时，不影响
+下一轮模型看到的消息排列。
+
 ## Sub-agent 为什么可以是 Tool
 
 最小组合方式是用已经提供的 `agentAsTool()`，把另一个 `Agent.run()` 包装成

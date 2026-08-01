@@ -6,6 +6,7 @@
 
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from .budget import AgentBudget, BudgetTracker, BudgetUsageUnavailableError
@@ -23,6 +24,7 @@ def agent_loop(
     model_policy: ModelCallPolicy | None = None,
     budget: AgentBudget | None = None,
     rate_limiter: ModelRateLimiter | None = None,
+    tool_execution: str = "sequential",
 ) -> Iterator[Event]:
     """运行 Agent，并逐个产生可观察事件。
 
@@ -32,6 +34,7 @@ def agent_loop(
 
     yield {"type": "agent_start"}
     tracker = BudgetTracker(budget)
+    _validate_tool_execution(tool_execution)
 
     # 一轮 = 调用一次模型 + 执行这次模型要求的全部工具。
     for turn in range(1, max_turns + 1):
@@ -87,13 +90,27 @@ def agent_loop(
             yield {"type": "agent_end", "message": assistant}
             return
 
-        for call in tool_calls:
-            yield {"type": "tool_start", "call": call}
-            result = _execute_tool(call, context.tools)
+        if tool_execution == "parallel":
+            for call in tool_calls:
+                yield {"type": "tool_start", "call": call}
+            # future 同时运行，但下面仍按 tool_calls 原顺序读取并写回结果。
+            with ThreadPoolExecutor(max_workers=len(tool_calls)) as executor:
+                futures = [
+                    executor.submit(_execute_tool, call, context.tools)
+                    for call in tool_calls
+                ]
+                for call, future in zip(tool_calls, futures, strict=True):
+                    result = future.result()
+                    context.messages.append(result)
+                    yield {"type": "tool_end", "call": call, "result": result}
+        else:
+            for call in tool_calls:
+                yield {"type": "tool_start", "call": call}
+                result = _execute_tool(call, context.tools)
 
-            # 这是 Agent 最关键的一步：工具结果成为下一轮模型能看到的消息。
-            context.messages.append(result)
-            yield {"type": "tool_end", "call": call, "result": result}
+                # 这是 Agent 最关键的一步：工具结果成为下一轮模型能看到的消息。
+                context.messages.append(result)
+                yield {"type": "tool_end", "call": call, "result": result}
 
         yield {"type": "turn_end", "turn": turn}
 
@@ -135,6 +152,11 @@ def _tool_result(call: Message, content: str, is_error: bool) -> Message:
     }
 
 
+def _validate_tool_execution(value: str) -> None:
+    if value not in {"sequential", "parallel"}:
+        raise ValueError("tool_execution 必须是 sequential 或 parallel")
+
+
 class Agent:
     """保存对话历史的便捷外壳；真正的算法仍然在 agent_loop()。"""
 
@@ -149,6 +171,7 @@ class Agent:
         session_id: str = "default",
         budget: AgentBudget | None = None,
         rate_limiter: ModelRateLimiter | None = None,
+        tool_execution: str = "sequential",
     ) -> None:
         self.model = model
         self.max_turns = max_turns
@@ -157,6 +180,8 @@ class Agent:
         self.session_id = session_id
         self.budget = budget
         self.rate_limiter = rate_limiter
+        _validate_tool_execution(tool_execution)
+        self.tool_execution = tool_execution
         self._memory_loaded = False
         self.context = AgentContext(
             system_prompt=system_prompt,
@@ -176,6 +201,7 @@ class Agent:
                 self.model_policy,
                 self.budget,
                 self.rate_limiter,
+                self.tool_execution,
             )
         finally:
             if self.memory_store:

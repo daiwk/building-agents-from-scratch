@@ -98,7 +98,15 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         or os.environ.get("AGENT_SESSION_ID", "python-cli"),
         budget=budget,
         rate_limiter=rate_limiter,
+        tool_execution=_read_tool_execution(),
     )
+
+
+def _read_tool_execution() -> str:
+    value = os.environ.get("AGENT_TOOL_EXECUTION", "sequential").strip()
+    if value not in {"sequential", "parallel"}:
+        raise ValueError("AGENT_TOOL_EXECUTION 必须是 sequential 或 parallel")
+    return value
 
 
 def _create_rate_limiter_from_env() -> ModelRateLimiter | None:

@@ -41,10 +41,12 @@ describe("pi-agent feature parity", () => {
     process.env.AGENT_SKILLS_DIR = "skills";
     process.env.AGENT_MEMORY_FILE = memoryFile;
     process.env.AGENT_SESSION_ID = "pi-test";
+    process.env.AGENT_TOOL_EXECUTION = "parallel";
     delete process.env.PI_AGENT_TOOLS;
     delete process.env.PI_AGENT_SKILLS;
     delete process.env.PI_AGENT_MEMORY_FILE;
     delete process.env.PI_AGENT_SESSION_ID;
+    delete process.env.PI_AGENT_TOOL_EXECUTION;
 
     const agent = await createPiAgent();
 
@@ -55,5 +57,6 @@ describe("pi-agent feature parity", () => {
       role: "user",
       content: "上一轮消息",
     });
+    expect(agent.toolExecution).toBe("parallel");
   });
 });

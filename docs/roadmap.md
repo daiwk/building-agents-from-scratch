@@ -29,7 +29,7 @@
 - ~~timeout、指数退避、限流~~；
 - ~~token/cost budget~~（每次 run 累计，并在下一次模型调用前拦截）；
 - ~~JSON Schema 基础参数校验~~（复杂 Schema 后续接成熟 validator）；
-- 并行工具执行策略；
+- ~~并行工具执行策略~~（默认顺序，显式开启并保持结果顺序稳定）；
 - OpenTelemetry-compatible trace。
 
 原则：先形成完整 assistant message，再写入历史；半条消息不能污染 context。
@@ -47,6 +47,9 @@ limiter；多实例共享额度仍应交给 Redis 或 API 网关。
 币种与单价估算成本；项目不硬编码 MiniMax 套餐价格。预算是 soft boundary：usage 在响应
 结束后才可得，因此可能越过上限一次，但不会再开始下一次模型调用。CLI 和 Web UI 都会
 收到 `usage` 事件，Python 和 pi-agent 对照版也使用相同的配置与运行边界。
+
+工具执行默认保持顺序；`AGENT_TOOL_EXECUTION=parallel` 才会并发启动同一轮的独立工具。
+权限检查和结果写回仍按模型原始 call 顺序进行，避免完成时序让 Context 变得不确定。
 
 ## Stage 2：Memory
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { Agent, type AssistantMessage, type ModelProvider } from "../src/core/index.js";
+import {
+  Agent,
+  type AssistantMessage,
+  type ModelProvider,
+  type Tool,
+} from "../src/core/index.js";
 import { calculatorTool } from "../src/tools/index.js";
 
 class ScriptedModel implements ModelProvider {
@@ -137,5 +142,55 @@ describe("Agent", () => {
       isError: true,
       content: "Unknown tool: missing",
     });
+  });
+
+  it("runs independent tools concurrently but stores results in model order", async () => {
+    let activeTools = 0;
+    let maximumActiveTools = 0;
+    const makeDelayedTool = (name: string, delayMs: number): Tool => ({
+      name,
+      description: `${name} test tool`,
+      inputSchema: { type: "object" },
+      async execute() {
+        activeTools += 1;
+        maximumActiveTools = Math.max(maximumActiveTools, activeTools);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        activeTools -= 1;
+        return `${name}-result`;
+      },
+    });
+    const model = new ScriptedModel([
+      {
+        role: "assistant",
+        content: [
+          { type: "toolCall", id: "slow-call", name: "slow", arguments: {} },
+          { type: "toolCall", id: "fast-call", name: "fast", arguments: {} },
+        ],
+        stopReason: "toolUse",
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        stopReason: "stop",
+      },
+    ]);
+    const agent = new Agent({
+      model,
+      tools: [makeDelayedTool("slow", 20), makeDelayedTool("fast", 1)],
+      toolExecution: "parallel",
+    });
+    const endedTools: string[] = [];
+
+    for await (const event of agent.run("run both")) {
+      if (event.type === "toolEnd") endedTools.push(event.call.name);
+    }
+
+    expect(maximumActiveTools).toBe(2);
+    // fast 虽先完成，事件与 Context 仍按模型给出的 slow → fast 顺序写入。
+    expect(endedTools).toEqual(["slow", "fast"]);
+    expect(agent.context.messages.slice(2, 4)).toMatchObject([
+      { role: "tool", toolName: "slow", content: "slow-result" },
+      { role: "tool", toolName: "fast", content: "fast-result" },
+    ]);
   });
 });

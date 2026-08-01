@@ -1,6 +1,8 @@
 """Python 版离线测试，不访问真实 MiniMax。"""
 
 import unittest
+from threading import Lock
+from time import sleep
 from typing import Any
 from unittest.mock import patch
 
@@ -185,6 +187,78 @@ class AgentTest(unittest.TestCase):
         )
         self.assertEqual(wait_event["delay_seconds"], 0.5)
         sleep.assert_called_once_with(0.5)
+
+    def test_parallel_tools_overlap_but_keep_model_order(self) -> None:
+        active_tools = 0
+        maximum_active_tools = 0
+        lock = Lock()
+
+        def delayed_tool(name: str, delay: float) -> Tool:
+            def execute(_arguments: dict[str, Any]) -> str:
+                nonlocal active_tools, maximum_active_tools
+                with lock:
+                    active_tools += 1
+                    maximum_active_tools = max(
+                        maximum_active_tools, active_tools
+                    )
+                sleep(delay)
+                with lock:
+                    active_tools -= 1
+                return f"{name}-result"
+
+            return Tool(
+                name=name,
+                description=f"{name} test tool",
+                input_schema={"type": "object"},
+                execute=execute,
+            )
+
+        model = ScriptedModel(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "id": "slow-call",
+                            "name": "slow",
+                            "arguments": {},
+                        },
+                        {
+                            "type": "tool_call",
+                            "id": "fast-call",
+                            "name": "fast",
+                            "arguments": {},
+                        },
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "done"}],
+                },
+            ]
+        )
+        agent = Agent(
+            model,
+            tools=[delayed_tool("slow", 0.02), delayed_tool("fast", 0.001)],
+            tool_execution="parallel",
+        )
+
+        events = list(agent.run("run both"))
+
+        self.assertEqual(maximum_active_tools, 2)
+        self.assertEqual(
+            [
+                event["call"]["name"]
+                for event in events
+                if event["type"] == "tool_end"
+            ],
+            ["slow", "fast"],
+        )
+        self.assertEqual(
+            [message["tool_name"] for message in agent.context.messages[2:4]],
+            ["slow", "fast"],
+        )
 
 
 if __name__ == "__main__":

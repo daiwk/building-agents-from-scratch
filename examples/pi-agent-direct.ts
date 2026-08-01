@@ -53,7 +53,6 @@ const calculatorTool: AgentTool<
   label: "Calculator",
   description: "对两个数字执行一次精确的四则运算。",
   parameters: calculatorParameters,
-  executionMode: "sequential",
   async execute(_toolCallId, params) {
     let value: number;
     if (params.operation === "add") value = params.left + params.right;
@@ -84,7 +83,6 @@ const currentTimeTool: AgentTool<
   label: "Current time",
   description: "获取指定 IANA 时区的当前时间。",
   parameters: currentTimeParameters,
-  executionMode: "sequential",
   async execute(_toolCallId, params) {
     const text = new Intl.DateTimeFormat("zh-CN", {
       dateStyle: "full",
@@ -207,7 +205,7 @@ export async function createPiAgent(): Promise<PiAgent> {
     },
     sessionId,
     maxRetryDelayMs,
-    toolExecution: "sequential",
+    toolExecution: readToolExecutionMode(),
   });
 
   // pi-agent 已提供比教学版更细的标准事件。
@@ -304,6 +302,19 @@ function readNonNegativeNumber(name: string, fallback: number): number {
 function readNonNegativeInteger(name: string, fallback: number): number {
   const value = readNonNegativeNumber(name, fallback);
   if (!Number.isInteger(value)) throw new Error(`${name} must be an integer.`);
+  return value;
+}
+
+function readToolExecutionMode(): "sequential" | "parallel" {
+  const value =
+    process.env.PI_AGENT_TOOL_EXECUTION ??
+    process.env.AGENT_TOOL_EXECUTION ??
+    "sequential";
+  if (value !== "sequential" && value !== "parallel") {
+    throw new Error(
+      "PI_AGENT_TOOL_EXECUTION/AGENT_TOOL_EXECUTION must be sequential or parallel.",
+    );
+  }
   return value;
 }
 

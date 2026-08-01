@@ -65,6 +65,15 @@ AGENT_RATE_LIMIT_WINDOW_MS=60000
 这会平滑为约每秒一次请求，状态在同一个 `Agent` 的多次 `run()` 间共享。CLI/Web 收到
 `rateLimitWait` 后会显示具体等待时间，取消请求也能中止等待。
 
+## 顺序或并行执行工具
+
+```dotenv
+AGENT_TOOL_EXECUTION=parallel
+```
+
+默认值是 `sequential`。并行模式用 `Promise.all` 重叠执行工具，但结果仍按模型生成 tool
+call 的顺序写入 Context。只有确认工具彼此独立、没有共享写入时才应开启。
+
 ## 配置一次任务的预算
 
 ```dotenv

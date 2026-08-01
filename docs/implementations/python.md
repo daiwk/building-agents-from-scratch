@@ -36,6 +36,7 @@ Python CLI 与 TypeScript CLI 使用相同环境变量：
 
 ```dotenv
 AGENT_TOOLS=calculator,current_time
+AGENT_TOOL_EXECUTION=sequential
 AGENT_MEMORY_FILE=.agent-data/conversations.json
 AGENT_SESSION_ID=python-cli
 AGENT_SKILLS_DIR=skills
@@ -63,6 +64,9 @@ asyncio/httpx，而不是无限增加后台线程。
 Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前产生
 `rate_limit_wait`。同步教学版使用 `time.sleep()`；迁移到 asyncio 时可直接替换为
 `await asyncio.sleep()`，限流算法不需要改变。
+
+设置 `AGENT_TOOL_EXECUTION=parallel` 后，Python 版使用标准库 `ThreadPoolExecutor`
+并发执行同一轮的独立工具；future 虽然并行完成，结果仍按模型原始顺序读取和写回。
 
 ## 为什么用 `yield`
 
