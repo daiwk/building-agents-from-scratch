@@ -4,6 +4,7 @@ import type {
   AssistantMessage,
   ModelProvider,
   ToolCallBlock,
+  ToolExecutionMode,
   ToolResultMessage,
 } from "./types.js";
 import type { AgentBudget } from "./types.js";
@@ -35,6 +36,8 @@ export type AgentLoopOptions = {
   budget?: AgentBudget;
   // limiter 由 Agent 持有并跨 run 复用；agentLoop 只负责在模型调用前等待。
   rateLimiter?: ModelRateLimiter;
+  // 默认顺序执行；只有调用者确认工具彼此独立时才显式选择 parallel。
+  toolExecution?: ToolExecutionMode;
 };
 
 export type AgentHooks = {
@@ -158,16 +161,37 @@ export async function* agentLoop(
       return assistant;
     }
 
-    // 教学版按顺序执行工具，执行顺序和日志顺序完全一致，最容易调试。
-    for (const call of calls) {
-      throwIfAborted(options.signal);
-      await options.hooks?.beforeTool?.(call, context);
-      yield { type: "toolStart", call };
-      const result = await executeTool(call, context, options.signal);
-      // 工具结果也是一条消息。关键反馈环在这一行闭合。
-      context.messages.push(result);
-      await options.hooks?.afterTool?.(call, result, context);
-      yield { type: "toolEnd", call, result };
+    if (options.toolExecution === "parallel") {
+      // 先按模型给出的顺序完成权限检查；任一 hook 失败时不会启动半批工具。
+      for (const call of calls) {
+        throwIfAborted(options.signal);
+        await options.hooks?.beforeTool?.(call, context);
+      }
+      for (const call of calls) yield { type: "toolStart", call };
+
+      // Promise.all 让执行重叠，但返回数组仍与 calls 的原始顺序一致。
+      const results = await Promise.all(
+        calls.map((call) => executeTool(call, context, options.signal)),
+      );
+      for (const [index, call] of calls.entries()) {
+        const result = results[index];
+        if (!result) throw new Error("Parallel tool result is missing.");
+        context.messages.push(result);
+        await options.hooks?.afterTool?.(call, result, context);
+        yield { type: "toolEnd", call, result };
+      }
+    } else {
+      // 默认按顺序执行，执行顺序和日志顺序完全一致，最容易调试。
+      for (const call of calls) {
+        throwIfAborted(options.signal);
+        await options.hooks?.beforeTool?.(call, context);
+        yield { type: "toolStart", call };
+        const result = await executeTool(call, context, options.signal);
+        // 工具结果也是一条消息。关键反馈环在这一行闭合。
+        context.messages.push(result);
+        await options.hooks?.afterTool?.(call, result, context);
+        yield { type: "toolEnd", call, result };
+      }
     }
 
     yield { type: "turnEnd", turn };

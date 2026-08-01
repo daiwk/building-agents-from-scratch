@@ -200,6 +200,7 @@ class ComponentTest(unittest.TestCase):
                     "AGENT_MAX_TOTAL_TOKENS": "1000",
                     "AGENT_RATE_LIMIT_MAX_REQUESTS": "60",
                     "AGENT_RATE_LIMIT_WINDOW_MS": "60000",
+                    "AGENT_TOOL_EXECUTION": "parallel",
                 },
                 clear=True,
             ):
@@ -217,6 +218,7 @@ class ComponentTest(unittest.TestCase):
             self.assertIsNotNone(agent.memory_store)
             self.assertEqual(agent.budget.max_total_tokens, 1000)
             self.assertEqual(agent.rate_limiter.max_requests, 60)
+            self.assertEqual(agent.tool_execution, "parallel")
 
 
 if __name__ == "__main__":

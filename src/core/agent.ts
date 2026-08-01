@@ -10,6 +10,7 @@ import type {
   AssistantMessage,
   ModelProvider,
   Tool,
+  ToolExecutionMode,
 } from "./types.js";
 import type { ModelCallPolicy } from "./model-call.js";
 import type { AgentMemoryOptions } from "./memory.js";
@@ -27,6 +28,7 @@ export type AgentOptions = {
   contextBuilder?: ContextBuilder;
   budget?: AgentBudget;
   rateLimiter?: ModelRateLimiter;
+  toolExecution?: ToolExecutionMode;
 };
 
 /**
@@ -45,6 +47,7 @@ export class Agent {
   private readonly contextBuilder: ContextBuilder | undefined;
   private readonly budget: AgentBudget | undefined;
   private readonly rateLimiter: ModelRateLimiter | undefined;
+  private readonly toolExecution: ToolExecutionMode;
   private memoryLoaded = false;
 
   constructor(options: AgentOptions) {
@@ -57,6 +60,7 @@ export class Agent {
     this.contextBuilder = options.contextBuilder;
     this.budget = options.budget;
     this.rateLimiter = options.rateLimiter;
+    this.toolExecution = options.toolExecution ?? "sequential";
     this.context = {
       systemPrompt: options.systemPrompt ?? "You are a helpful assistant.",
       messages: [],
@@ -77,6 +81,7 @@ export class Agent {
     const contextBuilder = options.contextBuilder ?? this.contextBuilder;
     const budget = options.budget ?? this.budget;
     const rateLimiter = options.rateLimiter ?? this.rateLimiter;
+    const toolExecution = options.toolExecution ?? this.toolExecution;
     // yield* 把内部生成器产生的事件原样转发给外部调用者。
     try {
       return yield* agentLoop(this.context, this.model, {
@@ -86,6 +91,7 @@ export class Agent {
         ...(contextBuilder ? { contextBuilder } : {}),
         ...(budget ? { budget } : {}),
         ...(rateLimiter ? { rateLimiter } : {}),
+        toolExecution,
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } finally {

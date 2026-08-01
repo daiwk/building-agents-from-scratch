@@ -116,6 +116,9 @@ export type ToolExecutionContext = {
   signal?: AbortSignal;
 };
 
+/** sequential 最容易调试；parallel 只适合彼此独立的工具调用。 */
+export type ToolExecutionMode = "sequential" | "parallel";
+
 // execute 就是一个普通函数：接收模型生成的参数，返回字符串结果。
 export type Tool = {
   name: string;

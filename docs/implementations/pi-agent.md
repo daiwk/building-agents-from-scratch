@@ -27,6 +27,7 @@ npm run pi-example -- "精确计算 1234 × 5678"
 
 ```dotenv
 AGENT_TOOLS=calculator,current_time
+AGENT_TOOL_EXECUTION=sequential
 AGENT_MEMORY_FILE=.agent-data/conversations.json
 AGENT_SESSION_ID=pi-cli
 AGENT_SKILLS_DIR=skills
@@ -36,6 +37,7 @@ AGENT_SKILLS=tool-first
 需要与 from-scratch Agent 隔离时，可以使用 `PI_AGENT_TOOLS`、
 `PI_AGENT_MEMORY_FILE`、`PI_AGENT_SESSION_ID`、`PI_AGENT_SKILLS_DIR` 和
 `PI_AGENT_SKILLS` 覆盖。
+工具执行策略还可以用 `PI_AGENT_TOOL_EXECUTION` 单独覆盖。
 
 - 工具通过 pi-agent 自己的 `AgentTool` 与 TypeBox Schema 校验；
 - 历史消息从 `initialState.messages` 恢复；
@@ -81,6 +83,7 @@ pi-ai 自身也会计算 provider cost，但本示例的成本上限只采用你
 | 自己实现 Schema 子集 | TypeBox + pi-agent 原生校验 |
 | 自己实现模型重试循环 | pi-ai provider 原生 timeout/retry |
 | 共用平滑限流器 | 在 `streamFn` 入口限制每个 turn |
+| 显式顺序/并行策略 | pi-agent 原生 `toolExecution` |
 | 共用 `BudgetTracker` | 原生 usage + 生命周期事件驱动预算 |
 
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改

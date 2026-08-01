@@ -221,6 +221,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 子 Agent 隔离：agentAsTool 每次创建独立 child，不共享父 Agent 的可变消息数组。
 - 错误可恢复：工具不存在或执行失败时，错误会成为 `ToolResultMessage`，模型可以调整策略。
 - 输入有边界：模型生成的工具参数会先通过 JSON Schema 子集校验，再执行真实函数。
+- 工具可并行：默认顺序执行；显式开启后并发运行，但结果仍按模型 call 顺序写回。
 - 调用可恢复：模型请求支持 timeout、选择性 retry、指数退避和用户取消。
 - 请求可节流：进程内平滑限流跨多次 run 共享，并把等待状态暴露给 UI。
 - 输出可流式：MiniMax SSE 的文本与工具参数 delta 会实时进入 CLI/Web UI。
@@ -236,7 +237,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 
 推荐迭代顺序：
 
-1. 并行工具与 OpenTelemetry-compatible trace；
+1. OpenTelemetry-compatible trace；
 2. SQLite、精确 token budget、摘要与 MemoryIndex；
 3. skill 语义路由、依赖检查与版本信息；
 4. sub-agent 的结构化 handoff、深度与 token/time budget；
@@ -265,9 +266,10 @@ Web NDJSON 事件流。
 
 ## 当前边界
 
-- MiniMax 首版使用非流式 HTTP 响应，Agent 事件接口已为后续 token streaming 保留。
-- 工具参数目前依赖工具自己校验；下一步可以接 JSON Schema validator。
-- 对话仅存内存，进程退出即消失。
-- 暂未实现并行工具调用、重试、限流、成本预算和人工审批。
+- TypeScript MiniMax 已支持 streaming；Python 教学 provider 仍保持同步完整响应。
+- 工具参数校验只实现教学所需的 JSON Schema 子集，复杂 Schema 应接成熟 validator。
+- 会话可写入本地 JSON，但还没有 SQLite 和跨会话 MemoryIndex。
+- 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
+- 人工审批和 OpenTelemetry-compatible trace 尚未实现。
 
 这些不是被隐藏的缺陷，而是后续章节各自清晰的练习边界。

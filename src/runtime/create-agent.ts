@@ -9,6 +9,7 @@ import {
   type AgentHooks,
   type ContextBuilder,
   type ModelProvider,
+  type ToolExecutionMode,
 } from "../core/index.js";
 import { JsonFileConversationStore } from "../memory/index.js";
 import { CodexCliProvider, MiniMaxProvider } from "../providers/index.js";
@@ -60,6 +61,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
     ...(contextBuilder ? { contextBuilder } : {}),
     ...(budget ? { budget } : {}),
     ...(rateLimiter ? { rateLimiter } : {}),
+    toolExecution: readToolExecutionMode(),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),
@@ -79,6 +81,16 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
 export function getProviderName(): string {
   // `??` 表示左边没有值（undefined/null）时才使用右边的默认值。
   return process.env.AGENT_PROVIDER ?? "minimax";
+}
+
+function readToolExecutionMode(): ToolExecutionMode {
+  const value = process.env.AGENT_TOOL_EXECUTION?.trim() || "sequential";
+  if (value !== "sequential" && value !== "parallel") {
+    throw new Error(
+      "AGENT_TOOL_EXECUTION must be sequential or parallel.",
+    );
+  }
+  return value;
 }
 
 function createProvider(name: string): ModelProvider {
