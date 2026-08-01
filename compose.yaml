@@ -1,0 +1,37 @@
+services:
+  agent:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      AGENT_HOST: 0.0.0.0
+      AGENT_AUTH_CONFIG: /run/agent-config/auth.json
+      AGENT_AUDIT_FILE: /data/audit.jsonl
+      AGENT_MEMORY_DATABASE: /data/conversations.sqlite3
+      MINIMAX_API_KEY_FILE: /run/secrets/minimax_api_key
+    configs:
+      - source: agent_auth
+        target: /run/agent-config/auth.json
+    secrets:
+      - minimax_api_key
+    volumes:
+      - agent_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+configs:
+  agent_auth:
+    file: ./deploy/auth.json
+
+secrets:
+  minimax_api_key:
+    file: ./deploy/secrets/minimax_api_key.txt
+
+volumes:
+  agent_data:

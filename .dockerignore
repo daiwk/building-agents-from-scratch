@@ -1,0 +1,9 @@
+.git
+.env
+.agent-data
+.venv
+dist
+node_modules
+site
+deploy/auth.json
+deploy/secrets/*.txt

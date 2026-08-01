@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from re import findall, fullmatch
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .context_builder import ContextBuilder
 from .types import AgentContext
@@ -92,6 +92,7 @@ class SkillRoutingContextBuilder:
     router: SkillRouter | None = None
     limit: int = 3
     allowed_tool_names: list[str] | None = None
+    authorize_skill: Callable[[str], None] | None = None
 
     def build(self, context: AgentContext) -> AgentContext:
         built = self.delegate.build(context) if self.delegate else AgentContext(
@@ -112,6 +113,9 @@ class SkillRoutingContextBuilder:
         )
         if self.allowed_tool_names is not None:
             assert_skill_tools_available(skills, self.allowed_tool_names)
+        if self.authorize_skill:
+            for skill in skills:
+                self.authorize_skill(skill.name)
         suffix = (
             built.system_prompt[len(context.system_prompt):]
             if built.system_prompt.startswith(context.system_prompt)

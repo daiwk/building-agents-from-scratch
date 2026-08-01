@@ -41,6 +41,13 @@ import { createWorkspaceToolKit } from "../src/workspace/index.js";
 import { createMcpClientFromEnvironment, type McpClient } from "../src/mcp/index.js";
 import { HybridRetriever, createKnowledgeSearchTool, type SourceDocument } from "../src/retrieval/index.js";
 import type { Artifact } from "../src/artifacts/index.js";
+import {
+  EnvironmentSecretProvider,
+  authorize,
+  createAuditSinkFromEnvironment,
+  scopeTenantSessionId,
+  type Principal,
+} from "../src/security/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -138,11 +145,18 @@ class PiToolRegistry {
 export async function createPiAgent(
   options: { systemPrompt?: string } = {},
 ): Promise<PiAgent> {
+  const secrets = new EnvironmentSecretProvider();
+  const principal: Principal = {
+    subject: process.env.PI_AGENT_SUBJECT ?? "pi-cli",
+    tenantId: process.env.PI_AGENT_TENANT_ID ?? "local",
+    roles: [process.env.PI_AGENT_ROLE ?? "admin"],
+  };
   // pi-ai 已内置 MiniMax 国内 provider：
   // baseUrl=https://api.minimaxi.com/anthropic
   // 默认读取 MINIMAX_CN_API_KEY。
-  if (!process.env.MINIMAX_CN_API_KEY && process.env.MINIMAX_API_KEY) {
-    process.env.MINIMAX_CN_API_KEY = process.env.MINIMAX_API_KEY;
+  if (!process.env.MINIMAX_CN_API_KEY) {
+    const apiKey = secrets.get("MINIMAX_CN_API_KEY") ?? secrets.get("MINIMAX_API_KEY");
+    if (apiKey) process.env.MINIMAX_CN_API_KEY = apiKey;
   }
 
   const models = createModels();
@@ -183,6 +197,7 @@ export async function createPiAgent(
   }
   const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
   if (workspaceRoot) {
+    authorize(principal, "resource:workspace");
     const workspaceTools = createWorkspaceToolKit({
       root: workspaceRoot,
       allowWrite: readBoolean("AGENT_WORKSPACE_ALLOW_WRITE", false),
@@ -200,15 +215,22 @@ export async function createPiAgent(
       "current_time",
     ])),
   );
+  for (const tool of selectedTools) authorize(principal, `tool:${tool.name}`);
   const skillConfiguration = loadPiSkillConfiguration();
+  for (const skill of skillConfiguration.selected) authorize(principal, `skill:${skill.name}`);
   // Stage 6 的 prompt artifact 通过这个显式入口进入隔离评测实例，
   // 不会修改已运行 Agent 的线上 prompt。
   const basePrompt = options.systemPrompt ??
     "你是一个可靠的助手；精确计算和当前时间必须使用工具。";
-  const sessionId =
+  const rawSessionId =
     process.env.PI_AGENT_SESSION_ID ??
     process.env.AGENT_SESSION_ID ??
     "pi-cli";
+  const hasSecurityIdentity = ["PI_AGENT_SUBJECT", "PI_AGENT_TENANT_ID", "PI_AGENT_ROLE"]
+    .some((name) => process.env[name] !== undefined);
+  const sessionId = hasSecurityIdentity
+    ? scopeTenantSessionId(principal.tenantId, rawSessionId)
+    : rawSessionId;
   const hasPiMemoryOverride =
     process.env.PI_AGENT_MEMORY_FILE !== undefined ||
     process.env.PI_AGENT_MEMORY_DATABASE !== undefined;
@@ -260,6 +282,7 @@ export async function createPiAgent(
   const tracer = createTracerFromEnvironment(process.env, (error) => {
     console.error("\n[trace] export failed", error);
   });
+  const audit = createAuditSinkFromEnvironment();
   let runSpan: TraceSpan | undefined;
   let modelSpan: TraceSpan | undefined;
   let traceTurn = 0;
@@ -309,6 +332,7 @@ export async function createPiAgent(
       const routedSkills = query && skillConfiguration.catalog
         ? skillConfiguration.catalog.discover(query, { limit: 3, minScore: 0.05 })
         : skillConfiguration.selected;
+      for (const skill of routedSkills) authorize(principal, `skill:${skill.name}`);
       assertSkillToolsAvailable(
         routedSkills,
         agent.state.tools.map((tool) => tool.name),
@@ -343,6 +367,7 @@ export async function createPiAgent(
       process.stdout.write(event.assistantMessageEvent.delta);
     }
     if (event.type === "tool_execution_start") {
+      authorize(principal, `tool:${event.toolName}`);
       console.log(`\n[tool] ${event.toolName}`, event.args);
       const span = tracer?.startSpan(`execute_tool ${event.toolName}`, {
         ...(runSpan ? { parent: runSpan } : {}),
@@ -361,6 +386,11 @@ export async function createPiAgent(
         { "gen_ai.tool.result.is_error": event.isError },
       );
       toolSpans.delete(event.toolCallId);
+      await audit.write({
+        tenantId: principal.tenantId, subject: principal.subject,
+        action: `tool.${event.toolName}`, outcome: event.isError ? "failure" : "success",
+        resourceType: "tool", resourceId: event.toolName,
+      });
     }
     if (event.type === "message_end" && event.message.role === "assistant") {
       const usage = event.message.usage;
@@ -410,6 +440,11 @@ export async function createPiAgent(
           message.role === "assistant" && message.stopReason === "error",
       );
       await runSpan?.end(failed ? "ERROR" : "OK");
+      await audit.write({
+        tenantId: principal.tenantId, subject: principal.subject,
+        action: "agent.run", outcome: failed ? "failure" : "success",
+        resourceType: "session", resourceId: sessionId,
+      });
       runSpan = undefined;
     }
   });

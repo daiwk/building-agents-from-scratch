@@ -31,6 +31,11 @@ import {
 import { createBuiltinToolRegistry } from "../tools/index.js";
 import { createWorkspaceToolKit } from "../workspace/index.js";
 import { createMcpClientFromEnvironment } from "../mcp/index.js";
+import {
+  EnvironmentSecretProvider,
+  authorize,
+  type Principal,
+} from "../security/index.js";
 
 // 同一个后端文件只创建一个 store 实例，供 CLI/Web 的多个会话复用连接或写入队列。
 const memoryStores = new Map<string, ConversationStore>();
@@ -42,18 +47,24 @@ export function loadLocalEnv(): void {
   if (existsSync(".env")) loadEnvFile(".env");
 }
 
-export function createAgentFromEnv(sessionId = "default"): Agent {
-  return createAgentWithExtraTools(sessionId, []);
+export function createAgentFromEnv(
+  sessionId = "default",
+  principal: Principal = localPrincipal(),
+): Agent {
+  return createAgentWithExtraTools(sessionId, [], principal);
 }
 
 /** MCP 需要先异步 discovery；CLI/pi-agent 使用这个入口，普通同步装配保持不变。 */
-export async function createAgentFromEnvAsync(sessionId = "default"): Promise<Agent> {
+export async function createAgentFromEnvAsync(
+  sessionId = "default",
+  principal: Principal = localPrincipal(),
+): Promise<Agent> {
   const client = createMcpClientFromEnvironment();
-  if (!client) return createAgentWithExtraTools(sessionId, []);
+  if (!client) return createAgentWithExtraTools(sessionId, [], principal);
   try {
     const tools = (await client.createRegistry()).list();
     mcpClients.add(client);
-    return createAgentWithExtraTools(sessionId, tools);
+    return createAgentWithExtraTools(sessionId, tools, principal);
   } catch (error) {
     await client.close();
     throw error;
@@ -65,13 +76,18 @@ export async function closeRuntimeResources(): Promise<void> {
   mcpClients.clear();
 }
 
-function createAgentWithExtraTools(sessionId: string, extraTools: readonly Tool[]): Agent {
+function createAgentWithExtraTools(
+  sessionId: string,
+  extraTools: readonly Tool[],
+  principal: Principal,
+): Agent {
   const providerName = getProviderName();
   const model = createProvider(providerName);
   const toolRegistry = createBuiltinToolRegistry();
   toolRegistry.registerMany(extraTools);
   const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
   if (workspaceRoot) {
+    authorize(principal, "resource:workspace");
     toolRegistry.registerMany(createWorkspaceToolKit({
       root: workspaceRoot,
       allowWrite: readBoolean("AGENT_WORKSPACE_ALLOW_WRITE", false),
@@ -82,9 +98,10 @@ function createAgentWithExtraTools(sessionId: string, extraTools: readonly Tool[
     providerName === "minimax"
       ? readList("AGENT_TOOLS", ["calculator", "current_time"])
       : [];
+  for (const name of selectedToolNames) authorize(principal, `tool:${name}`);
   const basePrompt =
     "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。";
-  const skillConfiguration = configureSkills(basePrompt, selectedToolNames);
+  const skillConfiguration = configureSkills(basePrompt, selectedToolNames, principal);
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
   const memoryDatabase = process.env.AGENT_MEMORY_DATABASE?.trim();
   if (memoryFile && memoryDatabase) {
@@ -182,8 +199,9 @@ function readBoolean(name: string, fallback: boolean): boolean {
 function createProvider(name: string): ModelProvider {
   // Provider 是可替换零件；新增模型后端时不需要修改 agent-loop.ts。
   if (name === "minimax") {
+    const secrets = new EnvironmentSecretProvider();
     return new MiniMaxProvider({
-      apiKey: process.env.MINIMAX_API_KEY ?? "",
+      apiKey: secrets.get("MINIMAX_API_KEY") ?? "",
       model: process.env.MINIMAX_MODEL ?? "MiniMax-M2.7",
       baseUrl:
         process.env.MINIMAX_BASE_URL ??
@@ -226,7 +244,11 @@ function readList(name: string, fallback: string[] = []): string[] {
     .filter(Boolean);
 }
 
-function configureSkills(basePrompt: string, allowedToolNames: string[]): {
+function configureSkills(
+  basePrompt: string,
+  allowedToolNames: string[],
+  principal: Principal,
+): {
   systemPrompt: string;
   hooks?: AgentHooks;
 } {
@@ -243,10 +265,14 @@ function configureSkills(basePrompt: string, allowedToolNames: string[]): {
     }
     return {
       systemPrompt: basePrompt,
-      hooks: createDynamicSkillHook({ basePrompt, catalog, allowedToolNames }),
+      hooks: createDynamicSkillHook({
+        basePrompt, catalog, allowedToolNames,
+        authorizeSkill: (name) => authorize(principal, `skill:${name}`),
+      }),
     };
   }
   const selected = catalog.select(selectedNames);
+  for (const skill of selected) authorize(principal, `skill:${skill.name}`);
   assertSkillToolsAvailable(selected, allowedToolNames);
   return {
     systemPrompt: applySkillsToSystemPrompt(
@@ -254,6 +280,10 @@ function configureSkills(basePrompt: string, allowedToolNames: string[]): {
       selected,
     ),
   };
+}
+
+function localPrincipal(): Principal {
+  return { subject: "local-developer", tenantId: "local", roles: ["admin"] };
 }
 
 function createContextBuilderFromEnv(): ContextBuilder | undefined {

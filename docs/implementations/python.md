@@ -95,6 +95,10 @@ Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前�
 `tracing.py` 只使用标准库，并与 TypeScript 输出相同的 JSON 字段。一次 run、每次模型调用
 和工具执行形成父子 span；不设置 `AGENT_TRACE_FILE` 时不会创建文件，也没有额外运行开销。
 
+Stage 15 的 `security.py` 同样只用标准库，提供 hashed API Key、RBAC、tenant session key、
+`*_FILE` secret 和 JSONL audit。把 `Principal` 传给 `create_agent_from_env()` 后，runtime 会
+在 tool、skill、workspace 装配前授权，并自动把外部 session id 映射到租户命名空间。
+
 ## 为什么用 `yield`
 
 如果 `run()` 只返回最终字符串，外部就不知道模型何时请求工具。生成器允许每走一步就

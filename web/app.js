@@ -22,6 +22,9 @@ const elements = {
   fileStatus: document.querySelector("#file-status"),
   messageTemplate: document.querySelector("#message-template"),
   traceTemplate: document.querySelector("#trace-template"),
+  apiKey: document.querySelector("#api-key-input"),
+  saveApiKey: document.querySelector("#save-api-key"),
+  authStatus: document.querySelector("#auth-status"),
 };
 
 const state = {
@@ -36,17 +39,20 @@ const state = {
   activityDetail: "",
   timer: null,
   completed: false,
+  apiKey: sessionStorage.getItem("agent-api-key") || "",
 };
 
 initialize();
 
 async function initialize() {
   bindEvents();
+  elements.apiKey.value = state.apiKey;
   resizeInput();
   try {
     const response = await fetch("/api/health");
     const health = await response.json();
     elements.provider.textContent = health.provider || "unknown";
+    await checkIdentity();
   } catch {
     elements.provider.textContent = "offline";
     setRunState("error", "服务未连接");
@@ -73,6 +79,12 @@ function bindEvents() {
   });
 
   elements.reset.addEventListener("click", () => void resetConversation());
+  elements.saveApiKey.addEventListener("click", () => {
+    state.apiKey = elements.apiKey.value.trim();
+    if (state.apiKey) sessionStorage.setItem("agent-api-key", state.apiKey);
+    else sessionStorage.removeItem("agent-api-key");
+    void checkIdentity();
+  });
   elements.stop.addEventListener("click", stopRun);
 
   document.querySelectorAll("[data-prompt]").forEach((button) => {
@@ -116,7 +128,7 @@ async function sendMessage(rawMessage) {
     for (const file of files) {
       if (file.size > 2 * 1024 * 1024) throw new Error(`${file.name} 超过 2 MB。`);
       const upload = await fetch("/api/artifacts", {
-        method: "POST", headers: { "content-type": "application/json" },
+        method: "POST", headers: apiHeaders(true),
         body: JSON.stringify({ name: file.name, mimeType: normalizedMimeType(file), dataBase64: await fileToBase64(file) }),
         signal: state.abortController.signal,
       });
@@ -128,7 +140,7 @@ async function sendMessage(rawMessage) {
     elements.fileStatus.textContent = "Enter 发送 · 单个文件不超过 2 MB";
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: apiHeaders(true),
       body: JSON.stringify({
         message,
         artifactIds,
@@ -182,6 +194,24 @@ async function sendMessage(rawMessage) {
     elements.traceList.classList.remove("running");
     elements.input.focus();
   }
+}
+
+async function checkIdentity() {
+  try {
+    const response = await fetch("/api/me", { headers: apiHeaders() });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "认证失败");
+    elements.authStatus.textContent = `${body.principal.tenantId} · ${body.principal.subject}`;
+  } catch (error) {
+    elements.authStatus.textContent = error instanceof Error ? error.message : "认证失败";
+  }
+}
+
+function apiHeaders(json = false) {
+  const headers = {};
+  if (json) headers["content-type"] = "application/json";
+  if (state.apiKey) headers.authorization = `Bearer ${state.apiKey}`;
+  return headers;
 }
 
 function fileToBase64(file) {
@@ -419,33 +449,35 @@ function addTraceEvent(kind, label, title, detail = "") {
 async function resetConversation() {
   if (state.running) return;
   try {
-    await fetch("/api/reset", {
+    const response = await fetch("/api/reset", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: apiHeaders(true),
       body: JSON.stringify({ sessionId: state.sessionId }),
     });
-  } finally {
-    state.sessionId = "";
-    state.events = 0;
-    state.runNumber = 0;
-    state.assistantMessage = null;
-    state.completed = false;
-    localStorage.removeItem("agent-session-id");
-    elements.messages
-      .querySelectorAll(".message")
-      .forEach((message) => message.remove());
-    elements.traceList.replaceChildren();
-    elements.empty.hidden = false;
-    elements.traceEmpty.hidden = false;
-    elements.eventCount.textContent = "0 events";
-    setRunState("ready", "等待输入");
-    setActivity(
-      "ready",
-      "准备就绪",
-      "发送任务后，这里会持续显示当前阶段",
-    );
-    elements.input.focus();
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || "无法清空会话");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "无法清空会话";
+    setRunState("error", "清空失败");
+    setActivity("error", "会话没有被清空", message);
+    return;
   }
+  state.sessionId = "";
+  state.events = 0;
+  state.runNumber = 0;
+  state.assistantMessage = null;
+  state.completed = false;
+  localStorage.removeItem("agent-session-id");
+  elements.messages
+    .querySelectorAll(".message")
+    .forEach((message) => message.remove());
+  elements.traceList.replaceChildren();
+  elements.empty.hidden = false;
+  elements.traceEmpty.hidden = false;
+  elements.eventCount.textContent = "0 events";
+  setRunState("ready", "等待输入");
+  setActivity("ready", "准备就绪", "发送任务后，这里会持续显示当前阶段");
+  elements.input.focus();
 }
 
 function hideEmptyStates() {

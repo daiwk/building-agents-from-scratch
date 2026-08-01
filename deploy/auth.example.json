@@ -1,0 +1,9 @@
+[
+  {
+    "id": "local-admin",
+    "subject": "replace-me",
+    "tenantId": "replace-me",
+    "roles": ["admin"],
+    "sha256": "REPLACE_WITH_64_LOWERCASE_HEX"
+  }
+]

@@ -24,6 +24,12 @@ from .skills import (
 from .tracing import JsonlTraceExporter, Tracer
 from .workspace import create_workspace_toolkit
 from .mcp import McpClient, StdioMcpTransport
+from .security import (
+    EnvironmentSecretProvider,
+    Principal,
+    authorize,
+    scope_tenant_session_id,
+)
 
 
 def load_local_env(file_path: str | Path = ".env") -> None:
@@ -40,14 +46,20 @@ def load_local_env(file_path: str | Path = ".env") -> None:
         os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 
-def create_agent_from_env(session_id: str | None = None) -> Agent:
+def create_agent_from_env(
+    session_id: str | None = None,
+    principal: Principal | None = None,
+) -> Agent:
     """使用与 TypeScript 版相同的 AGENT_* 配置创建 Python Agent。"""
 
+    supplied_principal = principal
+    principal = principal or Principal("local-developer", "local", ("admin",))
+    secrets = EnvironmentSecretProvider()
     timeout_seconds = _read_non_negative_float(
         "AGENT_MODEL_TIMEOUT_MS", 120_000
     ) / 1000
     model = MiniMaxProvider(
-        api_key=os.environ.get("MINIMAX_API_KEY", ""),
+        api_key=secrets.get("MINIMAX_API_KEY") or "",
         model=os.environ.get("MINIMAX_MODEL", "MiniMax-M2.7"),
         base_url=os.environ.get(
             "MINIMAX_BASE_URL",
@@ -62,6 +74,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
     tool_registry = create_builtin_tool_registry()
     workspace_root = os.environ.get("AGENT_WORKSPACE_ROOT", "").strip()
     if workspace_root:
+        authorize(principal, "resource:workspace")
         tool_registry.register_many(create_workspace_toolkit(
             workspace_root,
             allow_write=_read_bool("AGENT_WORKSPACE_ALLOW_WRITE", False),
@@ -88,6 +101,8 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
             _read_mcp_timeout_seconds(),
         )
         tool_registry.register_many(mcp_client.create_registry().list())
+    for tool_name in tool_names:
+        authorize(principal, f"tool:{tool_name}")
     tools = tool_registry.select(tool_names)
 
     skill_names = _read_list("AGENT_SKILLS")
@@ -103,6 +118,8 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
             if "auto" in skill_names:
                 raise ValueError("AGENT_SKILLS=auto 不能和名称组合")
             selected_skills = skill_catalog.select(skill_names)
+            for skill in selected_skills:
+                authorize(principal, f"skill:{skill.name}")
             assert_skill_tools_available(selected_skills, tool_names)
 
     memory_file = os.environ.get("AGENT_MEMORY_FILE", "").strip()
@@ -142,7 +159,13 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         context_builder = SkillRoutingContextBuilder(
             base_prompt, skill_catalog, context_builder,
             allowed_tool_names=tool_names,
+            authorize_skill=lambda name: authorize(principal, f"skill:{name}"),
         )
+    raw_session_id = session_id or os.environ.get("AGENT_SESSION_ID", "python-cli")
+    effective_session_id = (
+        scope_tenant_session_id(principal.tenant_id, raw_session_id)
+        if supplied_principal else raw_session_id
+    )
     return Agent(
         model=model,
         tools=tools,
@@ -164,8 +187,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
             / 1000,
         ),
         memory_store=memory_store,
-        session_id=session_id
-        or os.environ.get("AGENT_SESSION_ID", "python-cli"),
+        session_id=effective_session_id,
         budget=budget,
         rate_limiter=rate_limiter,
         tool_execution=_read_tool_execution(),

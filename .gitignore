@@ -7,3 +7,5 @@ __pycache__/
 .agent-data/
 .env
 *.log
+deploy/auth.json
+deploy/secrets/*.txt

@@ -23,6 +23,12 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run pi-check
+      - name: Validate deployment templates
+        run: |
+          cp deploy/auth.example.json deploy/auth.json
+          touch deploy/secrets/minimax_api_key.txt
+          docker compose config --quiet
+          docker build --tag agent-stage15:test .
       - name: Run deterministic eval gate
         run: npm run eval -- run --dataset examples/evals/dataset.jsonl --baseline examples/evals/baseline.json --candidate examples/evals/candidate.json
       - run: PYTHONPATH=python python -m unittest discover -s python/tests -v

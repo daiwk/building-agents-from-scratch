@@ -49,6 +49,7 @@ nav:
       - Structured Output 与路由: concepts/structured-routing.md
       - Durable Runtime: concepts/durable-runtime.md
       - Retrieval 与多模态: concepts/retrieval-multimodal.md
+      - 安全与部署: concepts/security-deployment.md
       - 架构说明: architecture.md
   - 三种实现:
       - 如何选择: implementations/index.md
