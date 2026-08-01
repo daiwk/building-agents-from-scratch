@@ -32,6 +32,7 @@ AGENT_MEMORY_FILE=.agent-data/conversations.json
 AGENT_SESSION_ID=pi-cli
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
+AGENT_TRACE_FILE=.agent-data/traces.jsonl
 ```
 
 需要与 from-scratch Agent 隔离时，可以使用 `PI_AGENT_TOOLS`、
@@ -43,6 +44,7 @@ AGENT_SKILLS=tool-first
 - 历史消息从 `initialState.messages` 恢复；
 - `agent_end` listener 被 pi-agent await，memory 保存完成后 `prompt()` 才结束；
 - skill 仍然只注入指令，不自动获得工具或代码执行权限。
+- lifecycle listener 把 run、model 和 tool 事件写入与教学版相同的父子 span。
 
 ## Timeout 与 Retry
 
@@ -85,6 +87,7 @@ pi-ai 自身也会计算 provider cost，但本示例的成本上限只采用你
 | 共用平滑限流器 | 在 `streamFn` 入口限制每个 turn |
 | 显式顺序/并行策略 | pi-agent 原生 `toolExecution` |
 | 共用 `BudgetTracker` | 原生 usage + 生命周期事件驱动预算 |
+| 共用 `AgentTracer` | 生命周期事件驱动相同的 JSONL trace |
 
 成熟库适合继续做 streaming、复杂 provider 和生产集成；教学版适合定位控制流、修改
 协议以及验证自己的架构想法。

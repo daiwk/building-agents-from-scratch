@@ -20,6 +20,7 @@ import {
   BudgetUsageUnavailableError,
 } from "./budget.js";
 import { ModelRateLimiter, waitForRateLimit } from "./rate-limit.js";
+import type { AgentTracer, TraceSpan } from "./tracing.js";
 
 export type AgentLoopOptions = {
   // 最多允许调用模型多少次，防止模型和工具无限互相调用。
@@ -38,6 +39,8 @@ export type AgentLoopOptions = {
   rateLimiter?: ModelRateLimiter;
   // 默认顺序执行；只有调用者确认工具彼此独立时才显式选择 parallel。
   toolExecution?: ToolExecutionMode;
+  // tracer 可替换；核心循环只创建 span，不依赖具体观测平台。
+  tracer?: AgentTracer;
 };
 
 export type AgentHooks = {
@@ -67,6 +70,33 @@ export async function* agentLoop(
   context: AgentContext,
   model: ModelProvider,
   options: AgentLoopOptions = {},
+): AsyncGenerator<AgentEvent, AssistantMessage> {
+  const runSpan = options.tracer?.startSpan("agent.run", {
+    attributes: { "gen_ai.provider.name": model.name },
+  });
+  let completed = false;
+  let failure: unknown;
+  try {
+    const result = yield* runAgentLoop(context, model, options, runSpan);
+    completed = true;
+    return result;
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    await runSpan?.end(
+      failure ? "ERROR" : completed ? "OK" : "UNSET",
+      {},
+      failure,
+    );
+  }
+}
+
+async function* runAgentLoop(
+  context: AgentContext,
+  model: ModelProvider,
+  options: AgentLoopOptions,
+  runSpan?: TraceSpan,
 ): AsyncGenerator<AgentEvent, AssistantMessage> {
   const maxTurns = options.maxTurns ?? 8;
   const budget = new BudgetTracker(options.budget);
@@ -99,30 +129,45 @@ export async function* agentLoop(
       tools: builtContext.tools,
       ...(options.signal ? { signal: options.signal } : {}),
     };
+    const modelSpan = options.tracer?.startSpan("gen_ai.chat", {
+      ...(runSpan ? { parent: runSpan } : {}),
+      kind: "CLIENT",
+      attributes: {
+        "gen_ai.operation.name": "chat",
+        "gen_ai.provider.name": model.name,
+        "agent.turn": turn,
+      },
+    });
     let assistant: AssistantMessage;
     const streamed = model.stream !== undefined;
-    if (streamed) {
-      const stream = streamModelWithPolicy(
-        model,
-        modelRequest,
-        options.modelCall,
-        options.rateLimiter,
-      );
-      while (true) {
-        const next = await stream.next();
-        if (next.done) {
-          assistant = next.value;
-          break;
+    try {
+      if (streamed) {
+        const stream = streamModelWithPolicy(
+          model,
+          modelRequest,
+          options.modelCall,
+          options.rateLimiter,
+        );
+        while (true) {
+          const next = await stream.next();
+          if (next.done) {
+            assistant = next.value;
+            break;
+          }
+          yield next.value;
         }
-        yield next.value;
+      } else {
+        assistant = await callModelWithPolicy(
+          model,
+          modelRequest,
+          options.modelCall,
+          options.rateLimiter,
+        );
       }
-    } else {
-      assistant = await callModelWithPolicy(
-        model,
-        modelRequest,
-        options.modelCall,
-        options.rateLimiter,
-      );
+      await modelSpan?.end("OK", usageTraceAttributes(assistant.usage));
+    } catch (error) {
+      await modelSpan?.end("ERROR", {}, error);
+      throw error;
     }
     // 模型消息必须先进入历史，下一轮模型才知道自己刚才请求了什么工具。
     lastMessage = assistant;
@@ -171,7 +216,15 @@ export async function* agentLoop(
 
       // Promise.all 让执行重叠，但返回数组仍与 calls 的原始顺序一致。
       const results = await Promise.all(
-        calls.map((call) => executeTool(call, context, options.signal)),
+        calls.map((call) =>
+          executeTool(
+            call,
+            context,
+            options.signal,
+            options.tracer,
+            runSpan,
+          ),
+        ),
       );
       for (const [index, call] of calls.entries()) {
         const result = results[index];
@@ -186,7 +239,13 @@ export async function* agentLoop(
         throwIfAborted(options.signal);
         await options.hooks?.beforeTool?.(call, context);
         yield { type: "toolStart", call };
-        const result = await executeTool(call, context, options.signal);
+        const result = await executeTool(
+          call,
+          context,
+          options.signal,
+          options.tracer,
+          runSpan,
+        );
         // 工具结果也是一条消息。关键反馈环在这一行闭合。
         context.messages.push(result);
         await options.hooks?.afterTool?.(call, result, context);
@@ -205,6 +264,28 @@ export async function* agentLoop(
 }
 
 async function executeTool(
+  call: ToolCallBlock,
+  context: AgentContext,
+  signal?: AbortSignal,
+  tracer?: AgentTracer,
+  parent?: TraceSpan,
+): Promise<ToolResultMessage> {
+  const span = tracer?.startSpan(`execute_tool ${call.name}`, {
+    ...(parent ? { parent } : {}),
+    attributes: {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": call.name,
+      "gen_ai.tool.call.id": call.id,
+    },
+  });
+  const result = await executeToolCore(call, context, signal);
+  await span?.end(result.isError ? "ERROR" : "OK", {
+    "gen_ai.tool.result.is_error": result.isError,
+  });
+  return result;
+}
+
+async function executeToolCore(
   call: ToolCallBlock,
   context: AgentContext,
   signal?: AbortSignal,
@@ -260,6 +341,22 @@ async function executeTool(
       isError: true,
     };
   }
+}
+
+function usageTraceAttributes(
+  usage: AssistantMessage["usage"],
+): Record<string, number> {
+  if (!usage) return {};
+  return {
+    "gen_ai.usage.input_tokens": usage.input,
+    "gen_ai.usage.output_tokens": usage.output,
+    ...(usage.cacheRead === undefined
+      ? {}
+      : { "gen_ai.usage.cache_read_tokens": usage.cacheRead }),
+    ...(usage.cacheWrite === undefined
+      ? {}
+      : { "gen_ai.usage.cache_write_tokens": usage.cacheWrite }),
+  };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

@@ -15,8 +15,9 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 8. `reliability.py`：timeout、retry 和指数退避；
 9. `budget.py`：单次任务的 token / 成本软预算；
 10. `rate_limit.py`：跨任务共享的模型请求限流；
-11. `runtime.py`：统一读取环境变量；
-12. `cli.py`：终端交互外壳。
+11. `tracing.py`：零依赖父子 span 与 JSONL exporter；
+12. `runtime.py`：统一读取环境变量；
+13. `cli.py`：终端交互外壳。
 
 ## 运行
 
@@ -48,6 +49,7 @@ AGENT_MAX_RETRY_DELAY_MS=8000
 AGENT_RATE_LIMIT_MAX_REQUESTS=60
 AGENT_RATE_LIMIT_WINDOW_MS=60000
 AGENT_MAX_TOTAL_TOKENS=120000
+AGENT_TRACE_FILE=.agent-data/traces.jsonl
 ```
 
 不设置 `AGENT_MEMORY_FILE` 时仍是纯内存对话；不设置 `AGENT_SKILLS` 时不会加载任何
@@ -67,6 +69,9 @@ Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前�
 
 设置 `AGENT_TOOL_EXECUTION=parallel` 后，Python 版使用标准库 `ThreadPoolExecutor`
 并发执行同一轮的独立工具；future 虽然并行完成，结果仍按模型原始顺序读取和写回。
+
+`tracing.py` 只使用标准库，并与 TypeScript 输出相同的 JSON 字段。一次 run、每次模型调用
+和工具执行形成父子 span；不设置 `AGENT_TRACE_FILE` 时不会创建文件，也没有额外运行开销。
 
 ## 为什么用 `yield`
 

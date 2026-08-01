@@ -30,7 +30,7 @@
 - ~~token/cost budget~~（每次 run 累计，并在下一次模型调用前拦截）；
 - ~~JSON Schema 基础参数校验~~（复杂 Schema 后续接成熟 validator）；
 - ~~并行工具执行策略~~（默认顺序，显式开启并保持结果顺序稳定）；
-- OpenTelemetry-compatible trace。
+- ~~OpenTelemetry-compatible trace~~（run/model/tool 父子 span + 可替换 exporter）。
 
 原则：先形成完整 assistant message，再写入历史；半条消息不能污染 context。
 
@@ -50,6 +50,10 @@ limiter；多实例共享额度仍应交给 Redis 或 API 网关。
 
 工具执行默认保持顺序；`AGENT_TOOL_EXECUTION=parallel` 才会并发启动同一轮的独立工具。
 权限检查和结果写回仍按模型原始 call 顺序进行，避免完成时序让 Context 变得不确定。
+
+三套实现现在都会为一次 run 创建根 span，并把每次模型调用和工具执行记录为子 span。
+教学用 JSONL exporter 使用 `gen_ai.*` 属性，默认不保存 prompt、工具参数或结果；生产环境
+可以在不修改 Agent loop 的情况下，把小型 exporter 接口替换为真实 OTel SDK/OTLP。
 
 ## Stage 2：Memory
 

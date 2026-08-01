@@ -58,6 +58,13 @@ classDiagram
     class ModelRateLimiter {
       +reserve() number
     }
+    class AgentTracer {
+      +startSpan(name, options) TraceSpan
+    }
+    class TraceExporter {
+      <<interface>>
+      +export(span)
+    }
 
     Agent *-- AgentContext
     Agent --> ModelProvider
@@ -65,6 +72,8 @@ classDiagram
     Agent --> ContextBuilder
     Agent --> BudgetTracker
     Agent --> ModelRateLimiter
+    Agent --> AgentTracer
+    AgentTracer --> TraceExporter
     AgentContext o-- Tool
     Agent --> AgentHooks
     ToolRegistry --> Tool
@@ -133,6 +142,13 @@ hook 可以改变 context，但不应该偷偷执行下一轮循环。控制流�
 并行工具模式也不改变这个边界：全部 `beforeTool` 先按顺序完成，工具执行阶段才并发；
 结果、`afterTool` 和 Context 写入恢复为原始 call 顺序。这样并行只影响耗时，不影响
 下一轮模型看到的消息排列。
+
+## Event 与 Trace 的边界
+
+`AgentEvent` 是面向实时界面的临时信号，`TraceSpanRecord` 是面向持久化观测的完成记录。
+一次 `agent.run` 是根 span，每次 `gen_ai.chat` 和 `execute_tool` 是它的子 span；三种实现
+使用同样的 ID、时间和属性字段。默认不记录 prompt、工具参数或结果，exporter 失败也不会
+改变 Agent 的控制流。JSONL 只是教学实现，生产环境可在 `TraceExporter` 边界接 OTel SDK。
 
 ## Sub-agent 为什么可以是 Tool
 

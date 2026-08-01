@@ -16,6 +16,7 @@ from .skills import (
     apply_skills_to_system_prompt,
     load_skills_from_directory,
 )
+from .tracing import JsonlTraceExporter, Tracer
 
 
 def load_local_env(file_path: str | Path = ".env") -> None:
@@ -73,6 +74,8 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
     )
     budget = _create_budget_from_env()
     rate_limiter = _create_rate_limiter_from_env()
+    trace_file = os.environ.get("AGENT_TRACE_FILE", "").strip()
+    tracer = Tracer(JsonlTraceExporter(trace_file)) if trace_file else None
     return Agent(
         model=model,
         tools=tools,
@@ -99,6 +102,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         budget=budget,
         rate_limiter=rate_limiter,
         tool_execution=_read_tool_execution(),
+        tracer=tracer,
     )
 
 

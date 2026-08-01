@@ -22,6 +22,8 @@ import {
   BudgetTracker,
   createBudgetFromEnvironment,
   createRateLimiterFromEnvironment,
+  createTracerFromEnvironment,
+  type TraceSpan,
   waitForRateLimit,
 } from "../src/core/index.js";
 import {
@@ -176,6 +178,13 @@ export async function createPiAgent(): Promise<PiAgent> {
   const budgetOptions = createBudgetFromEnvironment();
   let budget = new BudgetTracker(budgetOptions);
   const rateLimiter = createRateLimiterFromEnvironment();
+  const tracer = createTracerFromEnvironment(process.env, (error) => {
+    console.error("\n[trace] export failed", error);
+  });
+  let runSpan: TraceSpan | undefined;
+  let modelSpan: TraceSpan | undefined;
+  let traceTurn = 0;
+  const toolSpans = new Map<string, TraceSpan>();
 
   const agent = new PiAgent({
     initialState: {
@@ -209,10 +218,26 @@ export async function createPiAgent(): Promise<PiAgent> {
   });
 
   // pi-agent 已提供比教学版更细的标准事件。
-  agent.subscribe((event) => {
+  agent.subscribe(async (event) => {
     if (event.type === "agent_start") {
       // pi-agent 实例可以多次 prompt；预算与 from-scratch 版一样按单次 run 重置。
       budget = new BudgetTracker(budgetOptions);
+      traceTurn = 0;
+      runSpan = tracer?.startSpan("agent.run", {
+        attributes: { "gen_ai.provider.name": "minimax-cn" },
+      });
+    }
+    if (event.type === "turn_start") {
+      traceTurn += 1;
+      modelSpan = tracer?.startSpan("gen_ai.chat", {
+        ...(runSpan ? { parent: runSpan } : {}),
+        kind: "CLIENT",
+        attributes: {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.provider.name": "minimax-cn",
+          "agent.turn": traceTurn,
+        },
+      });
     }
     if (
       event.type === "message_update" &&
@@ -222,12 +247,35 @@ export async function createPiAgent(): Promise<PiAgent> {
     }
     if (event.type === "tool_execution_start") {
       console.log(`\n[tool] ${event.toolName}`, event.args);
+      const span = tracer?.startSpan(`execute_tool ${event.toolName}`, {
+        ...(runSpan ? { parent: runSpan } : {}),
+        attributes: {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": event.toolName,
+          "gen_ai.tool.call.id": event.toolCallId,
+        },
+      });
+      if (span) toolSpans.set(event.toolCallId, span);
     }
     if (event.type === "tool_execution_end") {
       console.log(`[result] ${event.toolName}`, event.result);
+      await toolSpans.get(event.toolCallId)?.end(
+        event.isError ? "ERROR" : "OK",
+        { "gen_ai.tool.result.is_error": event.isError },
+      );
+      toolSpans.delete(event.toolCallId);
     }
     if (event.type === "message_end" && event.message.role === "assistant") {
       const usage = event.message.usage;
+      const traceStatus =
+        event.message.stopReason === "error" ? "ERROR" : "OK";
+      await modelSpan?.end(traceStatus, {
+        "gen_ai.usage.input_tokens": usage.input,
+        "gen_ai.usage.output_tokens": usage.output,
+        "gen_ai.usage.cache_read_tokens": usage.cacheRead,
+        "gen_ai.usage.cache_write_tokens": usage.cacheWrite,
+      });
+      modelSpan = undefined;
       const totals = budget.record({
         input: usage.input,
         output: usage.output,
@@ -258,8 +306,14 @@ export async function createPiAgent(): Promise<PiAgent> {
       console.log("\n[done]");
       // subscribe listener 会被 pi-agent await，保存完成后 prompt() 才结束。
       if (memoryStore) {
-        return memoryStore.save(sessionId, agent.state.messages);
+        await memoryStore.save(sessionId, agent.state.messages);
       }
+      const failed = event.messages.some(
+        (message) =>
+          message.role === "assistant" && message.stopReason === "error",
+      );
+      await runSpan?.end(failed ? "ERROR" : "OK");
+      runSpan = undefined;
     }
   });
 
