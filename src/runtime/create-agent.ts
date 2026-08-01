@@ -6,6 +6,7 @@ import {
   RecentContextBuilder,
   createBudgetFromEnvironment,
   createRateLimiterFromEnvironment,
+  createTracerFromEnvironment,
   type AgentHooks,
   type ContextBuilder,
   type ModelProvider,
@@ -45,6 +46,12 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
   const contextBuilder = createContextBuilderFromEnv();
   const budget = createBudgetFromEnvironment();
   const rateLimiter = createRateLimiterFromEnvironment();
+  const tracer = createTracerFromEnvironment(process.env, (error) => {
+    console.error(
+      "trace export failed:",
+      error instanceof Error ? error.message : String(error),
+    );
+  });
   if (budget && providerName !== "minimax") {
     throw new Error(
       `AGENT_* budget requires a provider with token usage; ${providerName} does not report it.`,
@@ -62,6 +69,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
     ...(budget ? { budget } : {}),
     ...(rateLimiter ? { rateLimiter } : {}),
     toolExecution: readToolExecutionMode(),
+    ...(tracer ? { tracer } : {}),
     modelCall: {
       timeoutMs: readNonNegativeNumber("AGENT_MODEL_TIMEOUT_MS", 120_000),
       maxRetries: readNonNegativeInteger("AGENT_MODEL_MAX_RETRIES", 1),

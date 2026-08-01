@@ -92,3 +92,14 @@ AGENT_MAX_TOTAL_TOKENS=120000
 
 预算在一次响应结束后才更新，所以它会阻止的是**下一次**模型调用，而不是截断已经开始的
 响应。需要账户级硬额度时，应同时使用模型平台的限额和服务端持久化计量。
+
+## 开启 Trace
+
+```dotenv
+AGENT_TRACE_FILE=.agent-data/traces.jsonl
+```
+
+每次 `Agent.run()` 会产生一个 `agent.run` 根 span；模型请求与工具调用分别成为
+`gen_ai.chat` 和 `execute_tool <name>` 子 span。默认不保存 prompt、工具参数和结果。
+`TraceExporter` 是可替换接口，JSONL 只用于教学和单机调试；完整字段与接入生产 OTel 的
+边界见“可观测性与 Trace”。

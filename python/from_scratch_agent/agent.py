@@ -14,6 +14,7 @@ from .memory import ConversationStore
 from .rate_limit import ModelRateLimiter
 from .reliability import ModelCallPolicy, call_with_policy
 from .types import AgentContext, Event, Message, ModelProvider, Tool
+from .tracing import Span, Tracer
 from .validation import validate_tool_input
 
 
@@ -25,6 +26,54 @@ def agent_loop(
     budget: AgentBudget | None = None,
     rate_limiter: ModelRateLimiter | None = None,
     tool_execution: str = "sequential",
+    tracer: Tracer | None = None,
+) -> Iterator[Event]:
+    """给核心循环包一层 root span；tracing 关闭时不会创建任何对象。"""
+
+    run_span = (
+        tracer.start_span(
+            "agent.run",
+            attributes={"gen_ai.provider.name": model.name},
+        )
+        if tracer
+        else None
+    )
+    completed = False
+    failure: BaseException | None = None
+    try:
+        yield from _run_agent_loop(
+            context,
+            model,
+            max_turns,
+            model_policy,
+            budget,
+            rate_limiter,
+            tool_execution,
+            tracer,
+            run_span,
+        )
+        completed = True
+    except BaseException as error:
+        failure = error
+        raise
+    finally:
+        if run_span:
+            run_span.end(
+                "ERROR" if failure else "OK" if completed else "UNSET",
+                error=failure,
+            )
+
+
+def _run_agent_loop(
+    context: AgentContext,
+    model: ModelProvider,
+    max_turns: int = 8,
+    model_policy: ModelCallPolicy | None = None,
+    budget: AgentBudget | None = None,
+    rate_limiter: ModelRateLimiter | None = None,
+    tool_execution: str = "sequential",
+    tracer: Tracer | None = None,
+    run_span: Span | None = None,
 ) -> Iterator[Event]:
     """运行 Agent，并逐个产生可观察事件。
 
@@ -52,15 +101,36 @@ def agent_loop(
 
         # 模型只看见结构化的上下文，不会直接执行 Python 函数。
         policy = model_policy or ModelCallPolicy()
-        assistant = call_with_policy(
-            lambda: model.generate(
-                context.system_prompt,
-                context.messages,
-                context.tools,
-            ),
-            policy,
-            rate_limiter,
+        model_span = (
+            tracer.start_span(
+                "gen_ai.chat",
+                parent=run_span,
+                kind="CLIENT",
+                attributes={
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.provider.name": model.name,
+                    "agent.turn": turn,
+                },
+            )
+            if tracer
+            else None
         )
+        try:
+            assistant = call_with_policy(
+                lambda: model.generate(
+                    context.system_prompt,
+                    context.messages,
+                    context.tools,
+                ),
+                policy,
+                rate_limiter,
+            )
+            if model_span:
+                model_span.end("OK", _usage_trace_attributes(assistant))
+        except BaseException as error:
+            if model_span:
+                model_span.end("ERROR", error=error)
+            raise
         context.messages.append(assistant)
         usage = assistant.get("usage")
         if isinstance(usage, dict) and usage:
@@ -96,7 +166,13 @@ def agent_loop(
             # future 同时运行，但下面仍按 tool_calls 原顺序读取并写回结果。
             with ThreadPoolExecutor(max_workers=len(tool_calls)) as executor:
                 futures = [
-                    executor.submit(_execute_tool, call, context.tools)
+                    executor.submit(
+                        _execute_tool_traced,
+                        call,
+                        context.tools,
+                        tracer,
+                        run_span,
+                    )
                     for call in tool_calls
                 ]
                 for call, future in zip(tool_calls, futures, strict=True):
@@ -106,7 +182,12 @@ def agent_loop(
         else:
             for call in tool_calls:
                 yield {"type": "tool_start", "call": call}
-                result = _execute_tool(call, context.tools)
+                result = _execute_tool_traced(
+                    call,
+                    context.tools,
+                    tracer,
+                    run_span,
+                )
 
                 # 这是 Agent 最关键的一步：工具结果成为下一轮模型能看到的消息。
                 context.messages.append(result)
@@ -142,6 +223,54 @@ def _execute_tool(call: Message, tools: list[Tool]) -> Message:
         return _tool_result(call, str(error), is_error=True)
 
 
+def _execute_tool_traced(
+    call: Message,
+    tools: list[Tool],
+    tracer: Tracer | None,
+    parent: Span | None,
+) -> Message:
+    span = (
+        tracer.start_span(
+            f"execute_tool {call.get('name', '')}",
+            parent=parent,
+            attributes={
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": str(call.get("name", "")),
+                "gen_ai.tool.call.id": str(call.get("id", "")),
+            },
+        )
+        if tracer
+        else None
+    )
+    result = _execute_tool(call, tools)
+    if span:
+        span.end(
+            "ERROR" if result["is_error"] else "OK",
+            {"gen_ai.tool.result.is_error": bool(result["is_error"])},
+        )
+    return result
+
+
+def _usage_trace_attributes(
+    assistant: Message,
+) -> dict[str, str | int | float | bool]:
+    usage = assistant.get("usage")
+    if not isinstance(usage, dict):
+        return {}
+    mapping = {
+        "input_tokens": "gen_ai.usage.input_tokens",
+        "output_tokens": "gen_ai.usage.output_tokens",
+        "cache_read_input_tokens": "gen_ai.usage.cache_read_tokens",
+        "cache_creation_input_tokens": "gen_ai.usage.cache_write_tokens",
+    }
+    return {
+        attribute: value
+        for key, attribute in mapping.items()
+        if isinstance((value := usage.get(key)), (int, float))
+        and not isinstance(value, bool)
+    }
+
+
 def _tool_result(call: Message, content: str, is_error: bool) -> Message:
     return {
         "role": "tool",
@@ -172,6 +301,7 @@ class Agent:
         budget: AgentBudget | None = None,
         rate_limiter: ModelRateLimiter | None = None,
         tool_execution: str = "sequential",
+        tracer: Tracer | None = None,
     ) -> None:
         self.model = model
         self.max_turns = max_turns
@@ -182,6 +312,7 @@ class Agent:
         self.rate_limiter = rate_limiter
         _validate_tool_execution(tool_execution)
         self.tool_execution = tool_execution
+        self.tracer = tracer
         self._memory_loaded = False
         self.context = AgentContext(
             system_prompt=system_prompt,
@@ -202,6 +333,7 @@ class Agent:
                 self.budget,
                 self.rate_limiter,
                 self.tool_execution,
+                self.tracer,
             )
         finally:
             if self.memory_store:

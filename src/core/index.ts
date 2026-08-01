@@ -6,4 +6,5 @@ export * from "./memory.js";
 export * from "./model-call.js";
 export * from "./rate-limit.js";
 export * from "./tool-validation.js";
+export * from "./tracing.js";
 export * from "./types.js";

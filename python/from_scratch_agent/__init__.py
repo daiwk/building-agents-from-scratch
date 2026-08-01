@@ -25,6 +25,7 @@ from .skills import (
     load_skills_from_directory,
 )
 from .tools import calculator_tool, current_time_tool
+from .tracing import JsonlTraceExporter, Span, SpanRecord, Tracer
 from .types import ModelProvider, Tool
 
 __all__ = [
@@ -39,6 +40,10 @@ __all__ = [
     "SkillCatalog",
     "Tool",
     "ToolRegistry",
+    "Tracer",
+    "Span",
+    "SpanRecord",
+    "JsonlTraceExporter",
     "agent_loop",
     "AgentBudget",
     "BudgetExceededError",

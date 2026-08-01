@@ -201,6 +201,7 @@ class ComponentTest(unittest.TestCase):
                     "AGENT_RATE_LIMIT_MAX_REQUESTS": "60",
                     "AGENT_RATE_LIMIT_WINDOW_MS": "60000",
                     "AGENT_TOOL_EXECUTION": "parallel",
+                    "AGENT_TRACE_FILE": str(Path(directory) / "traces.jsonl"),
                 },
                 clear=True,
             ):
@@ -219,6 +220,7 @@ class ComponentTest(unittest.TestCase):
             self.assertEqual(agent.budget.max_total_tokens, 1000)
             self.assertEqual(agent.rate_limiter.max_requests, 60)
             self.assertEqual(agent.tool_execution, "parallel")
+            self.assertIsNotNone(agent.tracer)
 
 
 if __name__ == "__main__":

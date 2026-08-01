@@ -170,7 +170,8 @@ src/
 │   ├── agent.ts          # 有状态 Agent
 │   ├── context-builder.ts # 本轮模型上下文裁剪
 │   ├── budget.ts          # 单次任务的 token / 成本预算
-│   └── rate-limit.ts      # 跨任务共享的模型请求限流
+│   ├── rate-limit.ts      # 跨任务共享的模型请求限流
+│   └── tracing.ts         # run / model / tool 父子 span
 ├── runtime/
 │   └── create-agent.ts   # CLI / Web 共用的装配入口
 ├── providers/
@@ -205,8 +206,8 @@ docs/                     # MkDocs 使用说明
 mkdocs.yml
 ```
 
-Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.md、模型调用可靠性
-和单次任务预算。
+Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.md、模型调用可靠性、
+单次任务预算和 OpenTelemetry-compatible trace。
 三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
 覆盖工具、记忆和技能配置。详见文档站的“三种实现”章节。
 
@@ -226,6 +227,7 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 - 请求可节流：进程内平滑限流跨多次 run 共享，并把等待状态暴露给 UI。
 - 输出可流式：MiniMax SSE 的文本与工具参数 delta 会实时进入 CLI/Web UI。
 - 资源可观察：每个模型响应报告累计 usage，可按自定义币种与单价设置 soft budget。
+- 调用可追踪：run、model、tool 形成父子 span，默认不记录 prompt 和工具参数。
 - 循环有上限：默认最多 8 轮，避免失控和意外消耗额度。
 - 高级能力外置：memory、skills、观测和策略通过 hooks 或 context 变换实现。
 - 默认安全：本机 CLI 后端使用只读 sandbox；示例工具不执行 shell、不写文件。
@@ -237,13 +239,12 @@ Python 与 pi-agent 对照版也支持工具选择、JSON 会话 memory、SKILL.
 
 推荐迭代顺序：
 
-1. OpenTelemetry-compatible trace；
-2. SQLite、精确 token budget、摘要与 MemoryIndex；
-3. skill 语义路由、依赖检查与版本信息；
-4. sub-agent 的结构化 handoff、深度与 token/time budget；
-5. scheduler + shared event bus，实现 multi-agent；
-6. 用状态节点和条件边实现 graph；
-7. eval + versioned artifacts + approval gate，实现受控 self-evolve。
+1. SQLite、精确 token budget、摘要与 MemoryIndex；
+2. skill 语义路由、依赖检查与版本信息；
+3. sub-agent 的结构化 handoff、深度与 token/time budget；
+4. scheduler + shared event bus，实现 multi-agent；
+5. 用状态节点和条件边实现 graph；
+6. eval + versioned artifacts + approval gate，实现受控 self-evolve。
 
 ## 验证
 
@@ -270,6 +271,6 @@ Web NDJSON 事件流。
 - 工具参数校验只实现教学所需的 JSON Schema 子集，复杂 Schema 应接成熟 validator。
 - 会话可写入本地 JSON，但还没有 SQLite 和跨会话 MemoryIndex。
 - 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
-- 人工审批和 OpenTelemetry-compatible trace 尚未实现。
+- 人工审批和正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。
 
 这些不是被隐藏的缺陷，而是后续章节各自清晰的练习边界。
