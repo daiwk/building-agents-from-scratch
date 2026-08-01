@@ -1,4 +1,4 @@
-import type { Skill } from "./types.js";
+import type { Skill, SkillRouter } from "./types.js";
 
 export type SkillDiscoveryOptions = {
   limit?: number;
@@ -30,7 +30,14 @@ export class SkillCatalog {
   }
 
   select(names: readonly string[]): Skill[] {
-    return names.map((name) => {
+    const selected: Skill[] = [];
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const visit = (name: string): void => {
+      if (visited.has(name)) return;
+      if (visiting.has(name)) {
+        throw new Error(`Circular skill dependency: ${name}`);
+      }
       const skill = this.skills.get(name);
       if (!skill) {
         throw new Error(
@@ -39,8 +46,14 @@ export class SkillCatalog {
           ].join(", ")}`,
         );
       }
-      return skill;
-    });
+      visiting.add(name);
+      for (const dependency of skill.dependencies) visit(dependency);
+      visiting.delete(name);
+      visited.add(name);
+      selected.push(skill);
+    };
+    for (const name of names) visit(name);
+    return selected;
   }
 
   /**
@@ -54,7 +67,7 @@ export class SkillCatalog {
     options: SkillDiscoveryOptions = {},
   ): Skill[] {
     const limit = options.limit ?? 3;
-    const minScore = options.minScore ?? 1;
+    const minScore = options.minScore ?? 0.0001;
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new Error("Skill discovery limit must be a positive integer.");
     }
@@ -66,7 +79,7 @@ export class SkillCatalog {
       .map((skill, order) => ({
         skill,
         order,
-        score: scoreSkill(query, skill),
+        score: scoreSkill(query, skill, [...this.skills.values()]),
       }))
       .filter((candidate) => candidate.score >= minScore)
       .sort(
@@ -75,6 +88,12 @@ export class SkillCatalog {
       )
       .slice(0, limit)
       .map((candidate) => candidate.skill);
+  }
+
+  async route(query: string, router: SkillRouter, limit = 3): Promise<Skill[]> {
+    const names = await router.route(query, this.list(), limit);
+    const unique = [...new Set(names)].slice(0, limit);
+    return this.select(unique);
   }
 }
 
@@ -89,22 +108,54 @@ export function applySkillsToSystemPrompt(
   const sections = skills.map(
     (skill) =>
       `<skill name="${escapeAttribute(skill.name)}">\n` +
+      `<metadata version="${escapeAttribute(skill.version)}" />\n` +
       `${skill.instructions}\n</skill>`,
   );
   return `${basePrompt.trim()}\n\n# Loaded skills\n\n${sections.join("\n\n")}`;
+}
+
+export function assertSkillToolsAvailable(
+  skills: readonly Skill[],
+  allowedToolNames: readonly string[],
+): void {
+  const allowed = new Set(allowedToolNames);
+  for (const skill of skills) {
+    const missing = skill.requiredTools.filter((name) => !allowed.has(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `Skill ${skill.name} requires unavailable tools: ${missing.join(", ")}`,
+      );
+    }
+  }
 }
 
 function escapeAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
-function scoreSkill(query: string, skill: Skill): number {
-  const normalizedQuery = query.toLocaleLowerCase();
-  const normalizedName = skill.name.toLocaleLowerCase();
-  let score = normalizedQuery.includes(normalizedName) ? 10 : 0;
-  const terms = new Set(tokenize(`${skill.name} ${skill.description}`));
-  for (const term of terms) {
-    if (normalizedQuery.includes(term)) score += 1;
+function scoreSkill(
+  query: string,
+  skill: Skill,
+  corpus: readonly Skill[],
+): number {
+  const queryTerms = tokenize(query);
+  const documentTerms = tokenize(
+    `${skill.name} ${skill.description} ${skill.tags.join(" ")}`,
+  );
+  let score = query
+    .toLocaleLowerCase()
+    .includes(skill.name.toLocaleLowerCase())
+    ? 10
+    : 0;
+  for (const term of queryTerms) {
+    const frequency = documentTerms.filter((item) => item === term).length;
+    const documentsWithTerm = corpus.filter((item) =>
+      tokenize(
+        `${item.name} ${item.description} ${item.tags.join(" ")}`,
+      ).includes(term),
+    ).length;
+    const idf = Math.log(1 + (corpus.length + 1) / (documentsWithTerm + 1));
+    score += frequency * idf / (documentTerms.length + 1);
   }
   return score;
 }

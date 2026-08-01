@@ -51,6 +51,12 @@ classDiagram
       <<interface>>
       +build(context) BuiltContext
     }
+    class MemoryIndex {
+      <<interface>>
+      +upsert(record)
+      +search(query)
+      +remove(id)
+    }
     class BudgetTracker {
       +record(usage) BudgetSnapshot
       +assertCanStartModelCall()
@@ -70,6 +76,7 @@ classDiagram
     Agent --> ModelProvider
     Agent --> ConversationStore
     Agent --> ContextBuilder
+    ContextBuilder --> MemoryIndex
     Agent --> BudgetTracker
     Agent --> ModelRateLimiter
     Agent --> AgentTracer

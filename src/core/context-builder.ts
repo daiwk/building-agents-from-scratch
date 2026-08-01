@@ -19,6 +19,15 @@ export type ContextBuilder = {
   build(context: Readonly<AgentContext>): Promise<BuiltContext> | BuiltContext;
 };
 
+/** Tokenizer 属于模型协议；注入后，ContextBuilder 不需要猜测供应商的切词规则。 */
+export type TokenCounter = {
+  count(text: string): number;
+};
+
+export type SummaryProvider = {
+  summarize(messages: readonly AgentMessage[]): Promise<string> | string;
+};
+
 export type RecentContextBuilderOptions = {
   maxMessages?: number;
   maxCharacters?: number;
@@ -51,6 +60,106 @@ export class RecentContextBuilder implements ContextBuilder {
       ),
       tools: context.tools,
     };
+  }
+}
+
+export type TokenContextBuilderOptions = {
+  maxTokens: number;
+  tokenCounter: TokenCounter;
+  summarizer?: SummaryProvider;
+};
+
+/**
+ * 按调用者提供的真实 tokenizer 保留完整轮次，并可把被裁掉的旧轮次压成摘要。
+ * 摘要只进入本轮 system prompt；ConversationStore 中的原始消息不会被覆盖。
+ */
+export class TokenContextBuilder implements ContextBuilder {
+  constructor(private readonly options: TokenContextBuilderOptions) {
+    assertPositiveInteger("maxTokens", options.maxTokens);
+  }
+
+  async build(context: Readonly<AgentContext>): Promise<BuiltContext> {
+    const turns = groupIntoTurns(context.messages);
+    const selected: AgentMessage[][] = [];
+    let used =
+      this.options.tokenCounter.count(context.systemPrompt) +
+      this.options.tokenCounter.count(JSON.stringify(context.tools));
+    for (let index = turns.length - 1; index >= 0; index -= 1) {
+      const turn = turns[index];
+      if (!turn) continue;
+      const cost = this.options.tokenCounter.count(JSON.stringify(turn));
+      if (selected.length > 0 && used + cost > this.options.maxTokens) break;
+      selected.unshift(turn);
+      used += cost;
+    }
+    const selectedCount = selected.reduce(
+      (total, turn) => total + turn.length,
+      0,
+    );
+    const omitted = context.messages.slice(
+      0,
+      context.messages.length - selectedCount,
+    );
+    const rawSummary = omitted.length > 0 && this.options.summarizer
+      ? (await this.options.summarizer.summarize(omitted)).trim()
+      : "";
+    const summaryWrapper = "\n\n<conversation_summary>\n\n</conversation_summary>";
+    const summaryBudget = Math.max(
+      0,
+      this.options.maxTokens -
+        used -
+        this.options.tokenCounter.count(summaryWrapper),
+    );
+    const summary = fitTextToTokenBudget(
+      rawSummary,
+      summaryBudget,
+      this.options.tokenCounter,
+    );
+    return {
+      systemPrompt: summary
+        ? `${context.systemPrompt}\n\n<conversation_summary>\n${summary}\n</conversation_summary>`
+        : context.systemPrompt,
+      messages: selected.flat(),
+      tools: context.tools,
+    };
+  }
+}
+
+function fitTextToTokenBudget(
+  text: string,
+  maxTokens: number,
+  counter: TokenCounter,
+): string {
+  if (!text || maxTokens <= 0) return "";
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (counter.count(text.slice(0, middle)) <= maxTokens) low = middle;
+    else high = middle - 1;
+  }
+  return text.slice(0, low);
+}
+
+/** 无模型、可预测的教学摘要器；生产环境可在同一接口接专用摘要模型。 */
+export class ExtractiveSummaryProvider implements SummaryProvider {
+  constructor(private readonly maxCharacters = 2_000) {
+    assertPositiveInteger("maxCharacters", maxCharacters);
+  }
+
+  summarize(messages: readonly AgentMessage[]): string {
+    const lines = messages.map((message) => {
+      if (message.role === "user") return `user: ${message.content}`;
+      if (message.role === "tool") {
+        return `tool(${message.toolName}): ${message.content}`;
+      }
+      const text = message.content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join(" ");
+      return `assistant: ${text || `[${message.stopReason}]`}`;
+    });
+    return lines.join("\n").slice(-this.maxCharacters);
   }
 }
 
@@ -87,7 +196,7 @@ function selectRecentTurns(
 /**
  * 一条 user message 开始一个新轮次；之后的 assistant/tool messages 属于同一轮。
  */
-function groupIntoTurns(
+export function groupIntoTurns(
   messages: readonly AgentMessage[],
 ): AgentMessage[][] {
   const turns: AgentMessage[][] = [];

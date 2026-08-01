@@ -29,6 +29,7 @@ npm run pi-example -- "精确计算 1234 × 5678"
 AGENT_TOOLS=calculator,current_time
 AGENT_TOOL_EXECUTION=sequential
 AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
+AGENT_MEMORY_INDEX_DATABASE=.agent-data/memory-index.sqlite3
 AGENT_SESSION_ID=pi-cli
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
@@ -36,8 +37,9 @@ AGENT_TRACE_FILE=.agent-data/traces.jsonl
 ```
 
 需要与 from-scratch Agent 隔离时，可以使用 `PI_AGENT_TOOLS`、
-`PI_AGENT_MEMORY_FILE`、`PI_AGENT_MEMORY_DATABASE`、`PI_AGENT_SESSION_ID`、
-`PI_AGENT_SKILLS_DIR` 和 `PI_AGENT_SKILLS` 覆盖。
+`PI_AGENT_MEMORY_FILE`、`PI_AGENT_MEMORY_DATABASE`、
+`PI_AGENT_MEMORY_INDEX_DATABASE`、`PI_AGENT_SESSION_ID`、`PI_AGENT_SKILLS_DIR` 和
+`PI_AGENT_SKILLS` 覆盖。
 工具执行策略还可以用 `PI_AGENT_TOOL_EXECUTION` 单独覆盖。
 
 - 工具通过 pi-agent 自己的 `AgentTool` 与 TypeBox Schema 校验；
@@ -46,6 +48,7 @@ AGENT_TRACE_FILE=.agent-data/traces.jsonl
 - `agent_end` listener 被 pi-agent await，memory 保存完成后 `prompt()` 才结束；
 - skill 仍然只注入指令，不自动获得工具或代码执行权限。
 - lifecycle listener 把 run、model 和 tool 事件写入与教学版相同的父子 span。
+- `agent_start` 根据最新用户消息执行相同的 Skill BM25 路由和 MemoryIndex 召回。
 
 ## Timeout 与 Retry
 

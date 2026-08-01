@@ -8,12 +8,26 @@ from .budget import (
     BudgetUsageUnavailableError,
     TokenPricing,
 )
+from .context_builder import (
+    ContextBuilder,
+    ExtractiveSummaryProvider,
+    MemoryRecallContextBuilder,
+    SummaryProvider,
+    TokenContextBuilder,
+    TokenCounter,
+)
 from .memory import (
     InMemoryConversationStore,
     JsonFileConversationStore,
     SqliteConversationStore,
 )
 from .minimax import MiniMaxProvider
+from .memory_index import (
+    InMemoryMemoryIndex,
+    MemoryIndex,
+    MemoryRecord,
+    SqliteMemoryIndex,
+)
 from .registry import ToolRegistry, create_builtin_tool_registry
 from .rate_limit import ModelRateLimiter
 from .reliability import (
@@ -25,7 +39,10 @@ from .runtime import create_agent_from_env, load_local_env
 from .skills import (
     Skill,
     SkillCatalog,
+    SkillRouter,
+    SkillRoutingContextBuilder,
     apply_skills_to_system_prompt,
+    assert_skill_tools_available,
     load_skills_from_directory,
 )
 from .tools import calculator_tool, current_time_tool
@@ -42,6 +59,8 @@ __all__ = [
     "RetryableModelError",
     "Skill",
     "SkillCatalog",
+    "SkillRouter",
+    "SkillRoutingContextBuilder",
     "Tool",
     "ToolRegistry",
     "Tracer",
@@ -54,7 +73,14 @@ __all__ = [
     "BudgetTracker",
     "BudgetUsageUnavailableError",
     "TokenPricing",
+    "ContextBuilder",
+    "ExtractiveSummaryProvider",
+    "MemoryRecallContextBuilder",
+    "SummaryProvider",
+    "TokenContextBuilder",
+    "TokenCounter",
     "apply_skills_to_system_prompt",
+    "assert_skill_tools_available",
     "calculator_tool",
     "create_builtin_tool_registry",
     "create_agent_from_env",
@@ -62,6 +88,10 @@ __all__ = [
     "InMemoryConversationStore",
     "JsonFileConversationStore",
     "SqliteConversationStore",
+    "InMemoryMemoryIndex",
+    "MemoryIndex",
+    "MemoryRecord",
+    "SqliteMemoryIndex",
     "load_skills_from_directory",
     "load_local_env",
 ]

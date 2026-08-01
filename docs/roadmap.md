@@ -55,23 +55,26 @@ limiter；多实例共享额度仍应交给 Redis 或 API 网关。
 教学用 JSONL exporter 使用 `gen_ai.*` 属性，默认不保存 prompt、工具参数或结果；生产环境
 可以在不修改 Agent loop 的情况下，把小型 exporter 接口替换为真实 OTel SDK/OTLP。
 
-## Stage 2：Memory
+## Stage 2：Memory（已完成）
 
 把 memory 拆成三个不同问题：
 
 1. `ConversationStore`：~~内存/JSON 教学实现与 SQLite 持久化~~；
-2. `ContextBuilder`：已提供 `RecentContextBuilder`，按最近完整轮次和字符预算构造本轮请求；
-3. `MemoryIndex`：跨会话语义/关键词检索。
+2. `ContextBuilder`：~~完整轮次、可插拔 tokenizer、旧历史摘要~~；
+3. `MemoryIndex`：~~episodic / semantic / procedural 分类与跨会话 BM25-like 检索~~。
 
 `RecentContextBuilder` 只裁剪发给模型的快照，不删除 ConversationStore 中的完整历史，
-并保证 tool call/result 不被截成孤立消息。下一步加入精确 token 计数与摘要，再增加
-episodic、semantic、procedural memory，避免把“memory”误写成一个巨型向量库类。
+并保证 tool call/result 不被截成孤立消息。`TokenContextBuilder` 接受目标 provider 的
+`TokenCounter`，因此可以使用真实 tokenizer，而不会拿字符数冒充 token；被裁掉的完整
+旧轮次可交给可替换 `SummaryProvider`，原始历史仍不删除。
 
 三套实现已使用同一个配置边界接入 SQLite：每个 session 一行 JSON messages，覆盖保存和
 清除由数据库事务完成。TypeScript 使用 Node 内置 `node:sqlite`，Python 使用标准库
 `sqlite3`，pi-agent 复用通用 store；JSON 文件实现仍保留，方便初学者直接观察数据。
+`MemoryIndex` 使用独立 SQLite 表保存三类长期记忆，并提供透明的 BM25-like 本地排序和
+prompt 注入 wrapper；后续接 embedding 只需替换 search 实现。
 
-## Stage 3：Skills
+## Stage 3：Skills（已完成）
 
 建议协议：
 
@@ -80,17 +83,18 @@ type Skill = {
   name: string;
   description: string;
   instructions: string;
-  tools?: Tool[];
+  version: string;
+  dependencies: string[];
+  tags: string[];
+  requiredTools: string[];
 };
 ```
 
-基础 load → select → inject 已完成；`SkillCatalog.discover()` 与
-`createDynamicSkillHook()` 也已提供透明的关键词动态选择，可用 `AGENT_SKILLS=auto`
-启用。只把选中的 skill 指令放入 context，不要把全部技能全文塞进 system prompt。
-
-当前 discover 是适合教学和少量 skill 的确定性 name/description 匹配，不是语义检索。
-下一步可在不改变 catalog 边界的前提下替换为 BM25、embedding 或模型路由。技能带来的
-工具仍走同一个权限边界。
+load → dependency resolve → route → inject 已完成。`SkillCatalog.discover()` 使用透明的
+BM25-like 排序；`ModelSkillRouter`/Python `SkillRouter` 可接专用分类模型，但输出仍经过
+Catalog 白名单、去重、limit 和依赖解析。`AGENT_SKILLS=auto` 在三套实现中按当前用户输入
+动态选择。frontmatter 支持 version、dependencies、tags 和 tools；tools 只声明依赖，
+未在宿主白名单中的工具会报错，Skill 永远不能自行扩大权限。
 
 ## Stage 4：Sub-agent 和 Multi-agent
 

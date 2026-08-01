@@ -9,6 +9,7 @@ import {
 } from "../src/core/index.js";
 import {
   JsonFileConversationStore,
+  SqliteMemoryIndex,
   SqliteConversationStore,
 } from "../src/memory/index.js";
 import {
@@ -135,6 +136,26 @@ describe("ConversationStore", () => {
     expect(await secondStore.load("web-1")).toEqual([]);
     expect(await secondStore.load("web-2")).toHaveLength(1);
     secondStore.close();
+  });
+});
+
+describe("SqliteMemoryIndex", () => {
+  it("persists typed memories across index instances", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "agent-memory-index-"));
+    temporaryDirectories.push(directory);
+    const path = join(directory, "memory-index.sqlite3");
+    const first = new SqliteMemoryIndex(path);
+    await first.upsert({
+      id: "preference",
+      kind: "semantic",
+      content: "用户喜欢中文回答",
+      createdAtUnixMs: 1,
+    });
+    first.close();
+
+    const second = new SqliteMemoryIndex(path);
+    expect((await second.search("喜欢中文"))[0]?.id).toBe("preference");
+    second.close();
   });
 });
 

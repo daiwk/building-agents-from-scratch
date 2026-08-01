@@ -184,7 +184,8 @@ src/
 │   └── registry.ts        # 注册与按名称授权工具
 ├── memory/
 │   ├── json-file-store.ts # 可直接阅读的本地会话
-│   └── sqlite-store.ts    # 多会话 SQLite 持久化
+│   ├── sqlite-store.ts    # 多会话 SQLite 持久化
+│   └── memory-index.ts    # 三类长期记忆与检索
 ├── skills/
 │   ├── loader.ts          # 安全读取 SKILL.md
 │   ├── catalog.ts         # 选择、发现并注入 skill
@@ -207,7 +208,8 @@ docs/                     # MkDocs 使用说明
 mkdocs.yml
 ```
 
-Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory、SKILL.md、模型调用
+Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory、分类 MemoryIndex、
+版本化 SKILL.md、模型调用
 可靠性、单次任务预算和 OpenTelemetry-compatible trace。
 三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
 覆盖工具、记忆和技能配置。详见文档站的“三种实现”章节。
@@ -240,12 +242,10 @@ Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory�
 
 推荐迭代顺序：
 
-1. 精确 token budget、摘要与 MemoryIndex；
-2. skill 语义路由、依赖检查与版本信息；
-3. sub-agent 的结构化 handoff、深度与 token/time budget；
-4. scheduler + shared event bus，实现 multi-agent；
-5. 用状态节点和条件边实现 graph；
-6. eval + versioned artifacts + approval gate，实现受控 self-evolve。
+1. sub-agent 的结构化 handoff、深度与 token/time budget；
+2. scheduler + shared event bus，实现 multi-agent；
+3. 用状态节点和条件边实现 graph；
+4. eval + versioned artifacts + approval gate，实现受控 self-evolve。
 
 ## 验证
 
@@ -270,7 +270,7 @@ Web NDJSON 事件流。
 
 - TypeScript MiniMax 已支持 streaming；Python 教学 provider 仍保持同步完整响应。
 - 工具参数校验只实现教学所需的 JSON Schema 子集，复杂 Schema 应接成熟 validator。
-- 会话可写入本地 JSON 或 SQLite，但还没有摘要和跨会话 MemoryIndex。
+- 会话、摘要和分类 MemoryIndex 已有教学实现；embedding 与供应商 tokenizer 需通过接口接入。
 - 并行工具没有事务回滚；共享写入、依赖链和逐个审批仍必须使用顺序模式。
 - 人工审批和正式 OTLP/SDK exporter 尚未实现；当前提供可替换的 JSONL 教学 exporter。
 

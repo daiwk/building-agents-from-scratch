@@ -47,6 +47,18 @@ AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
 session 是一行 JSON messages，数据库负责事务和写锁；切换后端不会改变 `Agent` 或
 `agentLoop()`。
 
+高级 memory 分为两个可组合 wrapper：`TokenContextBuilder` 使用注入的 provider tokenizer
+裁剪完整轮次，并可用 `SummaryProvider` 摘要旧历史；`MemoryRecallContextBuilder` 从
+`MemoryIndex` 召回 episodic、semantic、procedural 记录。开启本地索引：
+
+```dotenv
+AGENT_MEMORY_INDEX_DATABASE=.agent-data/memory-index.sqlite3
+AGENT_MEMORY_RECALL_LIMIT=5
+```
+
+Skill frontmatter 支持 `version`、`dependencies`、`tags` 和 `tools`。auto 模式使用
+BM25-like 路由，也可注入 `ModelSkillRouter`；模型路由结果不能绕过 Catalog 和工具白名单。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；
