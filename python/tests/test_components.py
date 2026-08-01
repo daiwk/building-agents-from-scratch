@@ -14,6 +14,7 @@ from from_scratch_agent import (
     ModelTimeoutError,
     RetryableModelError,
     SkillCatalog,
+    SqliteConversationStore,
     ToolRegistry,
     apply_skills_to_system_prompt,
     calculator_tool,
@@ -145,6 +146,24 @@ class ComponentTest(unittest.TestCase):
                 [{"role": "user", "content": "持久化"}],
             )
 
+    def test_sqlite_memory_isolates_replaces_and_clears_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "memory.sqlite3"
+            store = SqliteConversationStore(path)
+            store.save("python-1", [{"role": "user", "content": "第一版"}])
+            store.save("python-2", [{"role": "user", "content": "独立会话"}])
+            store.save("python-1", [{"role": "user", "content": "覆盖后"}])
+
+            restarted = SqliteConversationStore(path)
+            self.assertEqual(
+                restarted.load("python-1"),
+                [{"role": "user", "content": "覆盖后"}],
+            )
+            self.assertEqual(len(restarted.load("python-2")), 1)
+            restarted.clear("python-1")
+            self.assertEqual(restarted.load("python-1"), [])
+            self.assertEqual(len(restarted.load("python-2")), 1)
+
     def test_skill_loader_and_prompt_injection(self) -> None:
         skills = load_skills_from_directory("skills")
         selected = SkillCatalog().register_many(skills).select(["tool-first"])
@@ -184,13 +203,13 @@ class ComponentTest(unittest.TestCase):
 
     def test_runtime_uses_shared_agent_environment_variables(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            memory_file = str(Path(directory) / "memory.json")
+            memory_database = str(Path(directory) / "memory.sqlite3")
             with patch.dict(
                 environ,
                 {
                     "MINIMAX_API_KEY": "test-key",
                     "AGENT_TOOLS": "calculator",
-                    "AGENT_MEMORY_FILE": memory_file,
+                    "AGENT_MEMORY_DATABASE": memory_database,
                     "AGENT_SESSION_ID": "python-test",
                     "AGENT_SKILLS_DIR": "skills",
                     "AGENT_SKILLS": "tool-first",
@@ -217,10 +236,27 @@ class ComponentTest(unittest.TestCase):
             )
             self.assertEqual(agent.session_id, "python-test")
             self.assertIsNotNone(agent.memory_store)
+            self.assertIsInstance(agent.memory_store, SqliteConversationStore)
             self.assertEqual(agent.budget.max_total_tokens, 1000)
             self.assertEqual(agent.rate_limiter.max_requests, 60)
             self.assertEqual(agent.tool_execution, "parallel")
             self.assertIsNotNone(agent.tracer)
+
+    def test_runtime_rejects_two_memory_backends(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(
+                environ,
+                {
+                    "MINIMAX_API_KEY": "test-key",
+                    "AGENT_MEMORY_FILE": str(Path(directory) / "memory.json"),
+                    "AGENT_MEMORY_DATABASE": str(
+                        Path(directory) / "memory.sqlite3"
+                    ),
+                },
+                clear=True,
+            ):
+                with self.assertRaisesRegex(ValueError, "只能设置一个"):
+                    create_agent_from_env()
 
 
 if __name__ == "__main__":

@@ -33,6 +33,20 @@ npm run dev
 npm run check
 ```
 
+## 选择会话存储
+
+```dotenv
+# 推荐用于持续使用
+AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
+
+# 或者选择便于直接阅读的 JSON；不要同时设置
+# AGENT_MEMORY_FILE=.agent-data/conversations.json
+```
+
+`SqliteConversationStore` 使用 Node.js 22 内置的 `node:sqlite`，不增加 npm 依赖。每个
+session 是一行 JSON messages，数据库负责事务和写锁；切换后端不会改变 `Agent` 或
+`agentLoop()`。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；

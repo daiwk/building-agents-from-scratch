@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .agent import Agent
 from .budget import AgentBudget, TokenPricing
-from .memory import JsonFileConversationStore
+from .memory import JsonFileConversationStore, SqliteConversationStore
 from .rate_limit import ModelRateLimiter
 from .minimax import MiniMaxProvider
 from .registry import create_builtin_tool_registry
@@ -65,9 +65,17 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         selected_skills = catalog.select(skill_names)
 
     memory_file = os.environ.get("AGENT_MEMORY_FILE", "").strip()
-    memory_store = (
-        JsonFileConversationStore(memory_file) if memory_file else None
-    )
+    memory_database = os.environ.get("AGENT_MEMORY_DATABASE", "").strip()
+    if memory_file and memory_database:
+        raise ValueError(
+            "AGENT_MEMORY_FILE 和 AGENT_MEMORY_DATABASE 只能设置一个"
+        )
+    if memory_database:
+        memory_store = SqliteConversationStore(memory_database)
+    elif memory_file:
+        memory_store = JsonFileConversationStore(memory_file)
+    else:
+        memory_store = None
     base_prompt = (
         "你是一个简洁、可靠的助手。"
         "需要精确计算或当前时间时，必须使用工具。"

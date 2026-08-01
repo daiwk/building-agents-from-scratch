@@ -2,6 +2,8 @@
 
 import json
 import os
+import sqlite3
+import time
 from copy import deepcopy
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -98,6 +100,67 @@ class JsonFileConversationStore:
         finally:
             if temporary_name and os.path.exists(temporary_name):
                 os.unlink(temporary_name)
+
+
+class SqliteConversationStore:
+    """标准库 SQLite store；表结构与 TypeScript 版一致。"""
+
+    def __init__(self, file_path: str | Path) -> None:
+        self.file_path = Path(file_path).resolve()
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as database:
+            database.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    session_id TEXT PRIMARY KEY,
+                    messages_json TEXT NOT NULL,
+                    updated_at_unix_ms INTEGER NOT NULL
+                )
+                """
+            )
+        os.chmod(self.file_path, 0o600)
+
+    def load(self, session_id: str) -> list[Message]:
+        _validate_session_id(session_id)
+        with self._connect() as database:
+            row = database.execute(
+                "SELECT messages_json FROM conversations WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return []
+        messages = json.loads(row[0])
+        if not isinstance(messages, list):
+            raise ValueError("SQLite memory 中的 conversation 必须是列表")
+        return deepcopy(messages)
+
+    def save(self, session_id: str, messages: list[Message]) -> None:
+        _validate_session_id(session_id)
+        payload = json.dumps(messages, ensure_ascii=False)
+        with self._connect() as database:
+            database.execute(
+                """
+                INSERT INTO conversations(
+                    session_id, messages_json, updated_at_unix_ms
+                ) VALUES (?, ?, ?)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    messages_json = excluded.messages_json,
+                    updated_at_unix_ms = excluded.updated_at_unix_ms
+                """,
+                (session_id, payload, int(time.time() * 1000)),
+            )
+
+    def clear(self, session_id: str) -> None:
+        _validate_session_id(session_id)
+        with self._connect() as database:
+            database.execute(
+                "DELETE FROM conversations WHERE session_id = ?",
+                (session_id,),
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        # 每次操作使用短连接，避免 ThreadPool/Web 接入时共享线程绑定的 connection。
+        return sqlite3.connect(self.file_path, timeout=5)
 
 
 def _validate_session_id(session_id: str) -> None:

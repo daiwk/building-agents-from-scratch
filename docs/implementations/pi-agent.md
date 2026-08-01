@@ -2,7 +2,7 @@
 
 `examples/pi-agent-direct.ts` 用成熟的 pi-agent API 实现同一个 Agent。它不是包装
 本项目的 from-scratch 循环，而是直接创建 `Agent`、模型和 `AgentTool`，并复用项目的
-SKILL.md loader 与通用 JSON session store。
+SKILL.md loader 与通用 JSON/SQLite session store。
 
 ## 离线检查
 
@@ -28,7 +28,7 @@ npm run pi-example -- "精确计算 1234 × 5678"
 ```dotenv
 AGENT_TOOLS=calculator,current_time
 AGENT_TOOL_EXECUTION=sequential
-AGENT_MEMORY_FILE=.agent-data/conversations.json
+AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
 AGENT_SESSION_ID=pi-cli
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first
@@ -36,12 +36,13 @@ AGENT_TRACE_FILE=.agent-data/traces.jsonl
 ```
 
 需要与 from-scratch Agent 隔离时，可以使用 `PI_AGENT_TOOLS`、
-`PI_AGENT_MEMORY_FILE`、`PI_AGENT_SESSION_ID`、`PI_AGENT_SKILLS_DIR` 和
-`PI_AGENT_SKILLS` 覆盖。
+`PI_AGENT_MEMORY_FILE`、`PI_AGENT_MEMORY_DATABASE`、`PI_AGENT_SESSION_ID`、
+`PI_AGENT_SKILLS_DIR` 和 `PI_AGENT_SKILLS` 覆盖。
 工具执行策略还可以用 `PI_AGENT_TOOL_EXECUTION` 单独覆盖。
 
 - 工具通过 pi-agent 自己的 `AgentTool` 与 TypeBox Schema 校验；
 - 历史消息从 `initialState.messages` 恢复；
+- SQLite 和 JSON 都复用项目的通用 store，不依赖 pi-agent 私有存储格式；
 - `agent_end` listener 被 pi-agent await，memory 保存完成后 `prompt()` 才结束；
 - skill 仍然只注入指令，不自动获得工具或代码执行权限。
 - lifecycle listener 把 run、model 和 tool 事件写入与教学版相同的父子 span。

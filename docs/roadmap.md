@@ -59,13 +59,17 @@ limiter；多实例共享额度仍应交给 Redis 或 API 网关。
 
 把 memory 拆成三个不同问题：
 
-1. `ConversationStore`：已提供内存/JSON 教学实现，下一步接 SQLite；
+1. `ConversationStore`：~~内存/JSON 教学实现与 SQLite 持久化~~；
 2. `ContextBuilder`：已提供 `RecentContextBuilder`，按最近完整轮次和字符预算构造本轮请求；
 3. `MemoryIndex`：跨会话语义/关键词检索。
 
 `RecentContextBuilder` 只裁剪发给模型的快照，不删除 ConversationStore 中的完整历史，
 并保证 tool call/result 不被截成孤立消息。下一步加入精确 token 计数与摘要，再增加
 episodic、semantic、procedural memory，避免把“memory”误写成一个巨型向量库类。
+
+三套实现已使用同一个配置边界接入 SQLite：每个 session 一行 JSON messages，覆盖保存和
+清除由数据库事务完成。TypeScript 使用 Node 内置 `node:sqlite`，Python 使用标准库
+`sqlite3`，pi-agent 复用通用 store；JSON 文件实现仍保留，方便初学者直接观察数据。
 
 ## Stage 3：Skills
 
