@@ -11,6 +11,7 @@ import {
   type ConversationStore,
   type ContextBuilder,
   type ModelProvider,
+  type Tool,
   type ToolExecutionMode,
 } from "../core/index.js";
 import {
@@ -29,10 +30,12 @@ import {
 } from "../skills/index.js";
 import { createBuiltinToolRegistry } from "../tools/index.js";
 import { createWorkspaceToolKit } from "../workspace/index.js";
+import { createMcpClientFromEnvironment } from "../mcp/index.js";
 
 // 同一个后端文件只创建一个 store 实例，供 CLI/Web 的多个会话复用连接或写入队列。
 const memoryStores = new Map<string, ConversationStore>();
 const memoryIndexes = new Map<string, SqliteMemoryIndex>();
+const mcpClients = new Set<NonNullable<ReturnType<typeof createMcpClientFromEnvironment>>>();
 
 // CLI 和 Web 共用这个“装配层”，避免两个界面各自创建一套 Agent。
 export function loadLocalEnv(): void {
@@ -40,9 +43,33 @@ export function loadLocalEnv(): void {
 }
 
 export function createAgentFromEnv(sessionId = "default"): Agent {
+  return createAgentWithExtraTools(sessionId, []);
+}
+
+/** MCP 需要先异步 discovery；CLI/pi-agent 使用这个入口，普通同步装配保持不变。 */
+export async function createAgentFromEnvAsync(sessionId = "default"): Promise<Agent> {
+  const client = createMcpClientFromEnvironment();
+  if (!client) return createAgentWithExtraTools(sessionId, []);
+  try {
+    const tools = (await client.createRegistry()).list();
+    mcpClients.add(client);
+    return createAgentWithExtraTools(sessionId, tools);
+  } catch (error) {
+    await client.close();
+    throw error;
+  }
+}
+
+export async function closeRuntimeResources(): Promise<void> {
+  await Promise.all([...mcpClients].map((client) => client.close()));
+  mcpClients.clear();
+}
+
+function createAgentWithExtraTools(sessionId: string, extraTools: readonly Tool[]): Agent {
   const providerName = getProviderName();
   const model = createProvider(providerName);
   const toolRegistry = createBuiltinToolRegistry();
+  toolRegistry.registerMany(extraTools);
   const workspaceRoot = process.env.AGENT_WORKSPACE_ROOT?.trim();
   if (workspaceRoot) {
     toolRegistry.registerMany(createWorkspaceToolKit({

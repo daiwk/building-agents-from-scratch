@@ -115,5 +115,10 @@ token 与耗时后生成二元 `EvalSampleResult`。版本、holdout、gate、�
 `AgentTool`；仍需在 `PI_AGENT_TOOLS` 或 `AGENT_TOOLS` 中逐个授权。Trace replay 位于 Agent
 外层，所以 from-scratch 与 pi-agent 录制的完成轨迹可以进入同一个固定 dataset。
 
+Stage 10 的 MCP 工具也先进入同一个 core `ToolRegistry`，再适配为 pi-agent `AgentTool`；
+因此 `AGENT_MCP_TOOLS` 和 `PI_AGENT_TOOLS`/`AGENT_TOOLS` 两层授权仍然生效。Stage 11 的
+Structured Output/ModelRouter 与 Stage 12 的 DurableTaskStore 位于 Agent 外层，可包装
+pi-agent 的 `prompt()` 或把 pi-agent handoff 注册成 durable task handler，无需复制内部 loop。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

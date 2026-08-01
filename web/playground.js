@@ -36,6 +36,7 @@ function selectDemo(demo) {
   ui.title.textContent = demo.title;
   ui.description.textContent = demo.description;
   ui.run.disabled = false;
+  ui.run.textContent = "运行示例";
   ui.summary.textContent = "准备运行固定示例。";
   ui.result.textContent = "{}";
   ui.track.replaceChildren(empty("按“运行示例”观察数据如何经过组件。"));

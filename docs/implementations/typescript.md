@@ -72,6 +72,11 @@ Stage 7–9 分别位于 `src/evals/`、`src/web/playground.ts` 与 `src/workspa
 CI 中重放 JSONL fixture；Component Lab 展示真实组件状态；Workspace toolkit 默认只读，
 长结果通过 artifact 分段读取。
 
+Stage 10–12 位于 `src/mcp/`、`src/structured-output/`、`src/routing/` 与 `src/durable/`。
+MCP discovery 先经过 server namespace 和 tool allowlist，再成为普通 Tool；结构化结果在
+repair 前后都由宿主校验；模型路由按 generator/judge 分开计量。Durable Runtime 继续使用
+Node 内置 SQLite，保存 graph checkpoint、幂等 task、worker lease 和事件日志。
+
 ## hooks 放在哪里
 
 - `beforeModel`：加载 memory、压缩 context、选择 skill；

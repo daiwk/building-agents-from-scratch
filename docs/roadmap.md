@@ -2,7 +2,7 @@
 
 每个阶段都保持前一阶段可运行，不把高级概念混进最小循环。
 
-## Stage 0：最小 Agent（当前）
+## Stage 0：最小 Agent（已完成）
 
 已经具备：
 
@@ -174,7 +174,10 @@ candidate content 和 rationale，但不能调用 `approve()` 或 `publish()`；
 - ~~Sub-agent：父子事件和 handoff~~；
 - ~~Graph：fork、reducer 与最终 state~~；
 - ~~Self-evolve / Trace replay：评测、gate 和发布~~；
-- ~~Workspace：默认只读与显式写授权~~。
+- ~~Workspace：默认只读与显式写授权~~；
+- ~~MCP：discovery、allowlist、call 与脱敏~~；
+- ~~Structured Output/Router：repair、fallback 与隔离指标~~；
+- ~~Durable Runtime：SQLite task 与 event 恢复~~。
 
 每个 demo 调用项目里的真实组件，但使用固定输入和假模型。页面在普通宽屏与手机宽度下都
 保持文档流滚动，不使用锁死整页的固定高度。
@@ -191,24 +194,51 @@ candidate content 和 rationale，但不能调用 `approve()` 或 `publish()`；
 这些工具不执行 shell、不访问网络，也不会自动扩大 Skill 权限。通过
 `AGENT_WORKSPACE_ROOT` 设置唯一允许目录；`AGENT_WORKSPACE_ALLOW_WRITE` 默认 false。
 
-## Stage 10：MCP 接入（计划）
+## Stage 10：MCP 接入（已完成）
 
-先支持 stdio tool discovery/call、server/tool 白名单、timeout/cancel 和 secret 脱敏；
-Resources、Prompts 与远程 transport 后续再加入。MCP adapter 进入 ToolRegistry，不修改
-Agent loop。
+- ~~newline-delimited JSON-RPC stdio transport~~；
+- ~~initialize、tools/list 与 tools/call~~；
+- ~~server namespace 与 tool allowlist~~；
+- ~~timeout、AbortSignal/取消通知和错误传播~~；
+- ~~结果中的 token、password、authorization 等敏感字段脱敏~~；
+- ~~TypeScript、Python 与 pi-agent 的 ToolRegistry adapter~~。
 
-## Stage 11：Structured Output 与模型路由（计划）
+command、args、cwd 和 allowlist 只能由宿主环境变量配置，模型不能生成启动命令。
+MCP adapter 最终仍产出普通 `Tool`，没有修改 Agent loop。Resources、Prompts、sampling 和
+远程 transport 留在后续兼容性阶段。
 
-加入可校验 JSON 输出、无效结果 repair、按任务选模型、fallback，以及 generator/judge
-隔离统计。Graph planner 和 Skill router 只能输出宿主允许的结构。
+## Stage 11：Structured Output 与模型路由（已完成）
 
-## Stage 12：Durable Runtime（计划）
+- ~~递归 JSON Schema 教学子集校验~~；
+- ~~JSON/Markdown fence 解析与有限次数 repair~~；
+- ~~repair 后再次执行相同宿主校验~~；
+- ~~按 task、role 和 preferred model 显式路由~~；
+- ~~失败时按稳定顺序 fallback~~；
+- ~~generator/judge 的请求、失败和 token 指标隔离~~。
 
-提供 SQLite checkpoint、持久化 task queue、run/event store、幂等 task ID，以及服务重启后
-继续 interrupt/sub-agent；分布式队列保持为可替换生产实现。
+路由策略是普通宿主函数，不让模型直接选择任意 provider。复杂 Schema 生产实现仍建议换成
+成熟 validator；LLM judge 需要先用人工标签验证一致率。
 
-## Stage 13–15（远期）
+## Stage 12：Durable Runtime（已完成）
+
+- ~~SQLite GraphCheckpointStore，重启后 resume interrupt~~；
+- ~~SQLite 持久化 task queue~~；
+- ~~幂等 task ID 与 payload 冲突检查~~；
+- ~~worker claim、有限 lease 与过期任务回收~~；
+- ~~append-only task event log~~；
+- ~~按 kind 注册的 DurableTaskRunner~~。
+
+教学版适合单机 worker 和恢复演示。多机高吞吐任务应把相同接口替换为具备事务 claim、
+心跳、dead-letter queue 和监控的队列服务。
+
+## Stage 13–15（下一阶段）
 
 - Stage 13：带引用的文档摄取与 BM25/vector hybrid retrieval；
 - Stage 14：文件上传、图片输入、Artifact 预览与下载；
 - Stage 15：认证、租户隔离、RBAC、密钥管理、审计与部署模板。
+
+## Stage 16–18（远期）
+
+- Stage 16：MCP Resources/Prompts、远程 transport、连接健康检查与能力缓存；
+- Stage 17：人工反馈数据台、经过校准的 LLM judge 与线上/离线指标联动；
+- Stage 18：分布式 scheduler、worker heartbeat、dead-letter queue 与水平扩缩容。

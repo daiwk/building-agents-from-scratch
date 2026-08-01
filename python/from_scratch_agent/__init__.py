@@ -90,6 +90,21 @@ from .workspace import (
     WorkspaceToolKit,
     create_workspace_toolkit,
 )
+from .mcp import McpClient, McpTransport, StdioMcpTransport, redact_secrets
+from .structured_output import (
+    StructuredOutputError,
+    StructuredOutputResult,
+    generate_structured,
+    validate_structured_value,
+)
+from .routing import ModelRoute, ModelRouter
+from .durable import (
+    DurableEvent,
+    DurableTask,
+    DurableTaskRunner,
+    SqliteDurableTaskStore,
+    SqliteGraphCheckpointStore,
+)
 
 __all__ = [
     "Agent",
@@ -161,6 +176,21 @@ __all__ = [
     "InMemoryFileArtifactStore",
     "WorkspaceToolKit",
     "create_workspace_toolkit",
+    "McpClient",
+    "McpTransport",
+    "StdioMcpTransport",
+    "redact_secrets",
+    "StructuredOutputError",
+    "StructuredOutputResult",
+    "generate_structured",
+    "validate_structured_value",
+    "ModelRoute",
+    "ModelRouter",
+    "DurableEvent",
+    "DurableTask",
+    "DurableTaskRunner",
+    "SqliteDurableTaskStore",
+    "SqliteGraphCheckpointStore",
     "AgentEventBus",
     "HandoffResult",
     "SubagentScheduler",
