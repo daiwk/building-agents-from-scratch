@@ -1121,3 +1121,24 @@ h1 {
     animation-iteration-count: 1 !important;
   }
 }
+.attach-button {
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--blue, #2864dc);
+  font-weight: 700;
+}
+
+.attach-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+#file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

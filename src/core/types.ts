@@ -27,10 +27,20 @@ export type JsonSchema = {
   additionalProperties?: boolean;
 };
 
+// 多模态用户输入仍然只是“消息内容块”：文本和图片都由宿主明确提供。
+export type UserContentBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      source: { type: "base64"; mediaType: string; data: string };
+    };
+
+export type UserContent = string | UserContentBlock[];
+
 // 用户发给模型的一条消息。
 export type UserMessage = {
   role: "user";
-  content: string;
+  content: UserContent;
 };
 
 // 模型回答中的普通文本块。

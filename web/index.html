@@ -111,7 +111,9 @@
               autocomplete="off"
             ></textarea>
             <div class="composer-footer">
-              <span>Enter 发送 · Shift + Enter 换行</span>
+              <button class="attach-button" id="attach-button" type="button">＋ 添加文件</button>
+              <input id="file-input" type="file" accept="text/plain,text/markdown,application/json,image/png,image/jpeg,image/webp" multiple />
+              <span id="file-status">Enter 发送 · 单个文件不超过 2 MB</span>
               <button class="send-button" id="send-button" type="submit">
                 <span>运行</span>
                 <svg viewBox="0 0 18 18" aria-hidden="true">

@@ -17,6 +17,9 @@ const elements = {
   activityTitle: document.querySelector("#activity-title"),
   activityDetail: document.querySelector("#activity-detail"),
   activityElapsed: document.querySelector("#activity-elapsed"),
+  files: document.querySelector("#file-input"),
+  attach: document.querySelector("#attach-button"),
+  fileStatus: document.querySelector("#file-status"),
   messageTemplate: document.querySelector("#message-template"),
   traceTemplate: document.querySelector("#trace-template"),
 };
@@ -57,6 +60,11 @@ function bindEvents() {
   });
 
   elements.input.addEventListener("input", resizeInput);
+  elements.attach.addEventListener("click", () => elements.files.click());
+  elements.files.addEventListener("change", () => {
+    const count = elements.files.files.length;
+    elements.fileStatus.textContent = count ? `已选择 ${count} 个文件` : "Enter 发送 · 单个文件不超过 2 MB";
+  });
   elements.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -78,7 +86,7 @@ function bindEvents() {
 
 async function sendMessage(rawMessage) {
   const message = rawMessage.trim();
-  if (!message || state.running) return;
+  if ((!message && !elements.files.files.length) || state.running) return;
 
   state.running = true;
   state.completed = false;
@@ -92,7 +100,8 @@ async function sendMessage(rawMessage) {
   elements.input.value = "";
   resizeInput();
   hideEmptyStates();
-  addMessage("user", message);
+  const files = [...elements.files.files];
+  addMessage("user", [message, files.length ? `[附件: ${files.map((file) => file.name).join(", ")}]` : ""].filter(Boolean).join("\n"));
   setRunState("running", "Agent 运行中");
   setActivity(
     "running",
@@ -103,11 +112,26 @@ async function sendMessage(rawMessage) {
   elements.traceList.classList.add("running");
 
   try {
+    const artifactIds = [];
+    for (const file of files) {
+      if (file.size > 2 * 1024 * 1024) throw new Error(`${file.name} 超过 2 MB。`);
+      const upload = await fetch("/api/artifacts", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: file.name, mimeType: normalizedMimeType(file), dataBase64: await fileToBase64(file) }),
+        signal: state.abortController.signal,
+      });
+      const uploaded = await upload.json();
+      if (!upload.ok) throw new Error(uploaded.error || "文件上传失败。");
+      artifactIds.push(uploaded.id);
+    }
+    elements.files.value = "";
+    elements.fileStatus.textContent = "Enter 发送 · 单个文件不超过 2 MB";
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         message,
+        artifactIds,
         ...(state.sessionId ? { sessionId: state.sessionId } : {}),
       }),
       signal: state.abortController.signal,
@@ -158,6 +182,21 @@ async function sendMessage(rawMessage) {
     elements.traceList.classList.remove("running");
     elements.input.focus();
   }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`无法读取 ${file.name}`));
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizedMimeType(file) {
+  if (file.type) return file.type;
+  const extension = file.name.toLowerCase().split(".").pop();
+  return ({ txt: "text/plain", md: "text/markdown", json: "application/json" })[extension] || "application/octet-stream";
 }
 
 async function consumeNdjson(stream) {

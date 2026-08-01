@@ -149,7 +149,14 @@ export class ExtractiveSummaryProvider implements SummaryProvider {
 
   summarize(messages: readonly AgentMessage[]): string {
     const lines = messages.map((message) => {
-      if (message.role === "user") return `user: ${message.content}`;
+      if (message.role === "user") {
+        const content = typeof message.content === "string"
+          ? message.content
+          : message.content.map((block) =>
+              block.type === "text" ? block.text : `[image: ${block.source.mediaType}]`
+            ).join(" ");
+        return `user: ${content}`;
+      }
       if (message.role === "tool") {
         return `tool(${message.toolName}): ${message.content}`;
       }

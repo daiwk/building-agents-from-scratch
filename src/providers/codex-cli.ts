@@ -70,7 +70,14 @@ function renderPrompt(
 ): string {
   const history = messages
     .map((message) => {
-      if (message.role === "user") return `USER:\n${message.content}`;
+      if (message.role === "user") {
+        const content = typeof message.content === "string"
+          ? message.content
+          : message.content.map((block) =>
+              block.type === "text" ? block.text : `[image: ${block.source.mediaType}]`
+            ).join("\n");
+        return `USER:\n${content}`;
+      }
       if (message.role === "tool") {
         return `TOOL ${message.toolName}:\n${message.content}`;
       }

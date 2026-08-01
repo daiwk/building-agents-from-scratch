@@ -231,11 +231,35 @@ MCP adapter 最终仍产出普通 `Tool`，没有修改 Agent loop。Resources�
 教学版适合单机 worker 和恢复演示。多机高吞吐任务应把相同接口替换为具备事务 claim、
 心跳、dead-letter queue 和监控的队列服务。
 
-## Stage 13–15（下一阶段）
+## Stage 13：带引用的 Retrieval（已完成）
 
-- Stage 13：带引用的文档摄取与 BM25/vector hybrid retrieval；
-- Stage 14：文件上传、图片输入、Artifact 预览与下载；
-- Stage 15：认证、租户隔离、RBAC、密钥管理、审计与部署模板。
+- ~~文档切块与稳定 source/chunk id~~；
+- ~~BM25 本地检索~~；
+- ~~可插拔 embedding provider 与 cosine rank~~；
+- ~~reciprocal-rank fusion 混合排序~~；
+- ~~snippet、title、URI 和 source offset 引用~~；
+- ~~`search_knowledge` 工具与 TypeScript/Python/pi-agent 对照接入~~。
+
+检索器没有把 embedding API 写死：没有向量服务时仍能离线教学；传入同一接口的 embedding
+provider 后才启用混合排名。引用来自摄取时保存的 metadata，不要求模型凭空生成来源。
+
+## Stage 14：多模态输入与上传 Artifact（已完成）
+
+- ~~用户 text/image content block~~；
+- ~~Web 文件选择、上传和聊天关联~~；
+- ~~文本文件注入与图片 base64 输入~~；
+- ~~MIME allowlist、2 MB 限制和 SHA-256~~；
+- ~~Artifact 内联预览/下载接口~~；
+- ~~TypeScript/Python store 与 pi-agent 图片适配器~~。
+
+教学版使用进程内 ArtifactStore，服务重启后文件会消失；生产环境应换成对象存储、病毒扫描、
+租户级配额和带过期时间的下载 URL。上传内容永远不会作为脚本执行。
+
+## Stage 15（下一阶段）
+
+- 认证与租户隔离；
+- RBAC 与 tool/skill/resource 级授权；
+- 密钥管理、审计日志与部署模板。
 
 ## Stage 16–18（远期）
 

@@ -328,7 +328,7 @@ class Agent:
             tools=list(tools or []),
         )
 
-    def run(self, user_input: str) -> Iterator[Event]:
+    def run(self, user_input: str | list[dict[str, object]]) -> Iterator[Event]:
         """追加用户消息，然后把底层 loop 的事件原样转发出去。"""
 
         self._load_memory_once()
