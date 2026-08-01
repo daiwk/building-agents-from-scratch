@@ -15,12 +15,15 @@ import {
 } from "../core/index.js";
 import {
   JsonFileConversationStore,
+  MemoryRecallContextBuilder,
+  SqliteMemoryIndex,
   SqliteConversationStore,
 } from "../memory/index.js";
 import { CodexCliProvider, MiniMaxProvider } from "../providers/index.js";
 import {
   SkillCatalog,
   applySkillsToSystemPrompt,
+  assertSkillToolsAvailable,
   createDynamicSkillHook,
   loadSkillsFromDirectory,
 } from "../skills/index.js";
@@ -28,6 +31,7 @@ import { createBuiltinToolRegistry } from "../tools/index.js";
 
 // 同一个后端文件只创建一个 store 实例，供 CLI/Web 的多个会话复用连接或写入队列。
 const memoryStores = new Map<string, ConversationStore>();
+const memoryIndexes = new Map<string, SqliteMemoryIndex>();
 
 // CLI 和 Web 共用这个“装配层”，避免两个界面各自创建一套 Agent。
 export function loadLocalEnv(): void {
@@ -45,7 +49,7 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
       : [];
   const basePrompt =
     "你是一个简洁、可靠的助手。需要精确计算或当前时间时，必须使用工具。";
-  const skillConfiguration = configureSkills(basePrompt);
+  const skillConfiguration = configureSkills(basePrompt, selectedToolNames);
   const memoryFile = process.env.AGENT_MEMORY_FILE?.trim();
   const memoryDatabase = process.env.AGENT_MEMORY_DATABASE?.trim();
   if (memoryFile && memoryDatabase) {
@@ -53,7 +57,15 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
       "Set only one of AGENT_MEMORY_FILE or AGENT_MEMORY_DATABASE.",
     );
   }
-  const contextBuilder = createContextBuilderFromEnv();
+  const recentContextBuilder = createContextBuilderFromEnv();
+  const memoryIndexFile = process.env.AGENT_MEMORY_INDEX_DATABASE?.trim();
+  const contextBuilder = memoryIndexFile
+    ? new MemoryRecallContextBuilder(
+        getMemoryIndex(memoryIndexFile),
+        recentContextBuilder,
+        { limit: readPositiveInteger("AGENT_MEMORY_RECALL_LIMIT", 5) },
+      )
+    : recentContextBuilder;
   const budget = createBudgetFromEnvironment();
   const rateLimiter = createRateLimiterFromEnvironment();
   const tracer = createTracerFromEnvironment(process.env, (error) => {
@@ -97,6 +109,16 @@ export function createAgentFromEnv(sessionId = "default"): Agent {
         }
       : {}),
   });
+}
+
+function getMemoryIndex(filePath: string): SqliteMemoryIndex {
+  const absolutePath = resolve(filePath);
+  let index = memoryIndexes.get(absolutePath);
+  if (!index) {
+    index = new SqliteMemoryIndex(absolutePath);
+    memoryIndexes.set(absolutePath, index);
+  }
+  return index;
 }
 
 export function getProviderName(): string {
@@ -161,7 +183,7 @@ function readList(name: string, fallback: string[] = []): string[] {
     .filter(Boolean);
 }
 
-function configureSkills(basePrompt: string): {
+function configureSkills(basePrompt: string, allowedToolNames: string[]): {
   systemPrompt: string;
   hooks?: AgentHooks;
 } {
@@ -178,13 +200,15 @@ function configureSkills(basePrompt: string): {
     }
     return {
       systemPrompt: basePrompt,
-      hooks: createDynamicSkillHook({ basePrompt, catalog }),
+      hooks: createDynamicSkillHook({ basePrompt, catalog, allowedToolNames }),
     };
   }
+  const selected = catalog.select(selectedNames);
+  assertSkillToolsAvailable(selected, allowedToolNames);
   return {
     systemPrompt: applySkillsToSystemPrompt(
       basePrompt,
-      catalog.select(selectedNames),
+      selected,
     ),
   };
 }

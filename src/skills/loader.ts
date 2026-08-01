@@ -70,12 +70,20 @@ export function parseSkillMarkdown(markdown: string, sourcePath: string): Skill 
   if (!instructions) {
     throw new Error(`Skill instructions are empty: ${sourcePath}`);
   }
+  const version = metadata.version || "1.0.0";
+  if (!/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i.test(version)) {
+    throw new Error(`Invalid skill version: ${version}`);
+  }
 
   return {
     name: metadata.name,
     description: metadata.description,
     instructions,
     sourcePath: resolve(sourcePath),
+    version,
+    dependencies: splitList(metadata.dependencies),
+    tags: splitList(metadata.tags),
+    requiredTools: splitList(metadata.tools),
   };
 }
 
@@ -96,9 +104,15 @@ function parseSimpleFrontmatter(
     }
     const key = line.slice(0, separator).trim();
     const value = stripQuotes(line.slice(separator + 1).trim());
-    if (key === "name" || key === "description") metadata[key] = value;
+    if (["name", "description", "version", "dependencies", "tags", "tools"].includes(key)) {
+      metadata[key] = value;
+    }
   }
   return metadata;
+}
+
+function splitList(value = ""): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function stripQuotes(value: string): string {

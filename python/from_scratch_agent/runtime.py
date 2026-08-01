@@ -7,13 +7,17 @@ from pathlib import Path
 from .agent import Agent
 from .budget import AgentBudget, TokenPricing
 from .memory import JsonFileConversationStore, SqliteConversationStore
+from .context_builder import MemoryRecallContextBuilder
+from .memory_index import SqliteMemoryIndex
 from .rate_limit import ModelRateLimiter
 from .minimax import MiniMaxProvider
 from .registry import create_builtin_tool_registry
 from .reliability import ModelCallPolicy
 from .skills import (
     SkillCatalog,
+    SkillRoutingContextBuilder,
     apply_skills_to_system_prompt,
+    assert_skill_tools_available,
     load_skills_from_directory,
 )
 from .tracing import JsonlTraceExporter, Tracer
@@ -56,13 +60,18 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
 
     skill_names = _read_list("AGENT_SKILLS")
     selected_skills = []
+    skill_catalog = None
     if skill_names:
-        catalog = SkillCatalog().register_many(
+        skill_catalog = SkillCatalog().register_many(
             load_skills_from_directory(
                 os.environ.get("AGENT_SKILLS_DIR", "skills")
             )
         )
-        selected_skills = catalog.select(skill_names)
+        if skill_names != ["auto"]:
+            if "auto" in skill_names:
+                raise ValueError("AGENT_SKILLS=auto 不能和名称组合")
+            selected_skills = skill_catalog.select(skill_names)
+            assert_skill_tools_available(selected_skills, tool_names)
 
     memory_file = os.environ.get("AGENT_MEMORY_FILE", "").strip()
     memory_database = os.environ.get("AGENT_MEMORY_DATABASE", "").strip()
@@ -84,6 +93,24 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
     rate_limiter = _create_rate_limiter_from_env()
     trace_file = os.environ.get("AGENT_TRACE_FILE", "").strip()
     tracer = Tracer(JsonlTraceExporter(trace_file)) if trace_file else None
+    memory_index_file = os.environ.get(
+        "AGENT_MEMORY_INDEX_DATABASE", ""
+    ).strip()
+    recall_limit = _read_non_negative_int("AGENT_MEMORY_RECALL_LIMIT", 5)
+    if recall_limit <= 0:
+        raise ValueError("AGENT_MEMORY_RECALL_LIMIT 必须大于 0")
+    context_builder = (
+        MemoryRecallContextBuilder(
+            SqliteMemoryIndex(memory_index_file), limit=recall_limit
+        )
+        if memory_index_file
+        else None
+    )
+    if skill_names == ["auto"] and skill_catalog:
+        context_builder = SkillRoutingContextBuilder(
+            base_prompt, skill_catalog, context_builder,
+            allowed_tool_names=tool_names,
+        )
     return Agent(
         model=model,
         tools=tools,
@@ -111,6 +138,7 @@ def create_agent_from_env(session_id: str | None = None) -> Agent:
         rate_limiter=rate_limiter,
         tool_execution=_read_tool_execution(),
         tracer=tracer,
+        context_builder=context_builder,
     )
 
 

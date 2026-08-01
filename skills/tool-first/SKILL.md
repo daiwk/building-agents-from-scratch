@@ -1,6 +1,8 @@
 ---
 name: tool-first
 description: 在精确计算和当前时间问题中优先使用已注册工具
+version: 1.0.0
+tags: calculator, time, 工具, 计算, 时间
 ---
 
 # Tool First

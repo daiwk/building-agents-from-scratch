@@ -18,6 +18,7 @@ import { createModels, Type } from "@earendil-works/pi-ai";
 import { minimaxCnProvider } from "@earendil-works/pi-ai/providers/minimax-cn";
 import {
   JsonFileConversationStore,
+  SqliteMemoryIndex,
   SqliteConversationStore,
 } from "../src/memory/index.js";
 import {
@@ -32,6 +33,7 @@ import {
 import {
   SkillCatalog,
   applySkillsToSystemPrompt,
+  assertSkillToolsAvailable,
   loadSkillsFromDirectory,
 } from "../src/skills/index.js";
 
@@ -153,7 +155,8 @@ export async function createPiAgent(): Promise<PiAgent> {
       "current_time",
     ])),
   );
-  const selectedSkills = loadSelectedPiSkills();
+  const skillConfiguration = loadPiSkillConfiguration();
+  const basePrompt = "你是一个可靠的助手；精确计算和当前时间必须使用工具。";
   const sessionId =
     process.env.PI_AGENT_SESSION_ID ??
     process.env.AGENT_SESSION_ID ??
@@ -181,6 +184,13 @@ export async function createPiAgent(): Promise<PiAgent> {
     : memoryFile
       ? new JsonFileConversationStore<PiAgentMessage>(memoryFile)
       : undefined;
+  const memoryIndexFile = (
+    process.env.PI_AGENT_MEMORY_INDEX_DATABASE ??
+    process.env.AGENT_MEMORY_INDEX_DATABASE
+  )?.trim();
+  const memoryIndex = memoryIndexFile
+    ? new SqliteMemoryIndex(memoryIndexFile)
+    : undefined;
   const savedMessages = memoryStore
     ? await memoryStore.load(sessionId)
     : [];
@@ -210,8 +220,8 @@ export async function createPiAgent(): Promise<PiAgent> {
   const agent = new PiAgent({
     initialState: {
       systemPrompt: applySkillsToSystemPrompt(
-        "你是一个可靠的助手；精确计算和当前时间必须使用工具。",
-        selectedSkills,
+        basePrompt,
+        skillConfiguration.selected,
       ),
       model,
       tools: selectedTools,
@@ -247,6 +257,24 @@ export async function createPiAgent(): Promise<PiAgent> {
       runSpan = tracer?.startSpan("agent.run", {
         attributes: { "gen_ai.provider.name": "minimax-cn" },
       });
+      const query = latestPiUserText(agent.state.messages);
+      const routedSkills = query && skillConfiguration.catalog
+        ? skillConfiguration.catalog.discover(query, { limit: 3, minScore: 0.05 })
+        : skillConfiguration.selected;
+      assertSkillToolsAvailable(
+        routedSkills,
+        agent.state.tools.map((tool) => tool.name),
+      );
+      let prompt = applySkillsToSystemPrompt(basePrompt, routedSkills);
+      const recalled = query && memoryIndex
+        ? await memoryIndex.search(query, { limit: 5 })
+        : [];
+      if (recalled.length > 0) {
+        prompt += "\n\n# Relevant memories\n\n" + recalled.map((memory) =>
+          `<memory kind="${memory.kind}" id="${memory.id}">${escapeMemoryText(memory.content)}</memory>`,
+        ).join("\n");
+      }
+      agent.state.systemPrompt = prompt;
     }
     if (event.type === "turn_start") {
       traceTurn += 1;
@@ -341,19 +369,42 @@ export async function createPiAgent(): Promise<PiAgent> {
   return agent;
 }
 
-function loadSelectedPiSkills() {
+function loadPiSkillConfiguration() {
   const names = readList(
     "PI_AGENT_SKILLS",
     readList("AGENT_SKILLS", []),
   );
-  if (names.length === 0) return [];
+  if (names.length === 0) return { selected: [] };
   const directory =
     process.env.PI_AGENT_SKILLS_DIR ??
     process.env.AGENT_SKILLS_DIR ??
     "skills";
-  return new SkillCatalog()
-    .registerMany(loadSkillsFromDirectory(directory))
-    .select(names);
+  const catalog = new SkillCatalog()
+    .registerMany(loadSkillsFromDirectory(directory));
+  if (names.includes("auto")) {
+    if (names.length !== 1) throw new Error("PI_AGENT_SKILLS=auto cannot be combined with names.");
+    return { selected: [], catalog };
+  }
+  const selected = catalog.select(names);
+  assertSkillToolsAvailable(selected, readList(
+    "PI_AGENT_TOOLS",
+    readList("AGENT_TOOLS", ["calculator", "current_time"]),
+  ));
+  return { selected };
+}
+
+function latestPiUserText(messages: readonly PiAgentMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user" && typeof message.content === "string") {
+      return message.content;
+    }
+  }
+  return "";
+}
+
+function escapeMemoryText(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function readList(name: string, fallback: string[]): string[] {

@@ -4,9 +4,9 @@
 
 | 版本 | 最适合 | 你需要理解 | 已包含 |
 |---|---|---|---|
-| Python from scratch | 第一次学习、Notebook 调试 | 函数、列表、`for`、`yield` | 同步循环、Tools/Memory/Skills/Trace |
-| TypeScript from scratch | Web/Node 二次开发 | 类型、Promise、异步生成器 | 事件、可靠性、Tools/Memory/Skills/Trace |
-| pi-agent direct | 接近生产的继续迭代 | pi-agent 与 pi-ai API | 原生流式/Schema/重试 + Memory/Skills/Trace |
+| Python from scratch | 第一次学习、Notebook 调试 | 函数、列表、`for`、`yield` | 同步循环、分层 Memory、版本化 Skills、Trace |
+| TypeScript from scratch | Web/Node 二次开发 | 类型、Promise、异步生成器 | 事件、可靠性、分层 Memory、版本化 Skills、Trace |
+| pi-agent direct | 接近生产的继续迭代 | pi-agent 与 pi-ai API | 原生流式/Schema/重试 + 同构 Memory/Skills/Trace |
 
 建议先用 Python 回答“Agent 为什么会循环”，再用 TypeScript 回答“界面如何实时观察循环”，
 最后用 pi-agent 回答“成熟框架替我们抽象了什么”。

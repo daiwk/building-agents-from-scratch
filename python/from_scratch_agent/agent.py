@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from .budget import AgentBudget, BudgetTracker, BudgetUsageUnavailableError
+from .context_builder import ContextBuilder
 from .memory import ConversationStore
 from .rate_limit import ModelRateLimiter
 from .reliability import ModelCallPolicy, call_with_policy
@@ -27,6 +28,7 @@ def agent_loop(
     rate_limiter: ModelRateLimiter | None = None,
     tool_execution: str = "sequential",
     tracer: Tracer | None = None,
+    context_builder: ContextBuilder | None = None,
 ) -> Iterator[Event]:
     """给核心循环包一层 root span；tracing 关闭时不会创建任何对象。"""
 
@@ -51,6 +53,7 @@ def agent_loop(
             tool_execution,
             tracer,
             run_span,
+            context_builder,
         )
         completed = True
     except BaseException as error:
@@ -74,6 +77,7 @@ def _run_agent_loop(
     tool_execution: str = "sequential",
     tracer: Tracer | None = None,
     run_span: Span | None = None,
+    context_builder: ContextBuilder | None = None,
 ) -> Iterator[Event]:
     """运行 Agent，并逐个产生可观察事件。
 
@@ -116,11 +120,14 @@ def _run_agent_loop(
             else None
         )
         try:
+            model_context = (
+                context_builder.build(context) if context_builder else context
+            )
             assistant = call_with_policy(
                 lambda: model.generate(
-                    context.system_prompt,
-                    context.messages,
-                    context.tools,
+                    model_context.system_prompt,
+                    model_context.messages,
+                    model_context.tools,
                 ),
                 policy,
                 rate_limiter,
@@ -302,6 +309,7 @@ class Agent:
         rate_limiter: ModelRateLimiter | None = None,
         tool_execution: str = "sequential",
         tracer: Tracer | None = None,
+        context_builder: ContextBuilder | None = None,
     ) -> None:
         self.model = model
         self.max_turns = max_turns
@@ -313,6 +321,7 @@ class Agent:
         _validate_tool_execution(tool_execution)
         self.tool_execution = tool_execution
         self.tracer = tracer
+        self.context_builder = context_builder
         self._memory_loaded = False
         self.context = AgentContext(
             system_prompt=system_prompt,
@@ -334,6 +343,7 @@ class Agent:
                 self.rate_limiter,
                 self.tool_execution,
                 self.tracer,
+                self.context_builder,
             )
         finally:
             if self.memory_store:

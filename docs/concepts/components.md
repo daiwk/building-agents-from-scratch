@@ -123,8 +123,42 @@ AGENT_CONTEXT_MAX_CHARACTERS=50000
 摘要和检索。
 
 !!! info "Memory 不只是一个数据库"
-    ConversationStore 负责保存，ContextBuilder 负责本轮上下文，未来的 MemoryIndex
-    负责跨会话检索；三者不应塞进同一个类。
+    ConversationStore 负责保存，ContextBuilder 负责本轮上下文，MemoryIndex
+    负责跨会话检索；三者没有塞进同一个类。
+
+### Token、摘要与长期记忆
+
+`TokenContextBuilder` 要求注入目标模型的 `TokenCounter`，按完整轮次装填；项目不会把字符
+估算包装成“精确 token”。可选 `SummaryProvider` 只摘要被裁掉的旧轮次，并将结果放进
+`<conversation_summary>`，ConversationStore 中的原文保持不变。内置
+`ExtractiveSummaryProvider` 方便离线学习，生产环境可替换为专用摘要模型。
+
+长期记忆使用独立 `MemoryIndex`：
+
+| kind | 含义 | 示例 |
+|---|---|---|
+| `episodic` | 发生过的事件 | 上周讨论过发布方案 |
+| `semantic` | 稳定事实 | 用户偏好中文回答 |
+| `procedural` | 做事规则 | 发布前必须跑测试 |
+
+`SqliteMemoryIndex` 提供持久化和透明的 BM25-like 排序；
+`MemoryRecallContextBuilder` 只把当前问题相关的少量记录注入 prompt。配置入口：
+
+```dotenv
+AGENT_MEMORY_INDEX_DATABASE=.agent-data/memory-index.sqlite3
+AGENT_MEMORY_RECALL_LIMIT=5
+```
+
+记录由应用显式写入，而不是让模型未经确认地“记住一切”：
+
+```ts
+await memoryIndex.upsert({
+  id: "user-language",
+  kind: "semantic",
+  content: "用户偏好中文回答",
+  createdAtUnixMs: Date.now(),
+});
+```
 
 ## 读取 SKILL.md
 
@@ -135,6 +169,21 @@ skills/
 └── tool-first/
     └── SKILL.md
 ```
+
+frontmatter 可声明版本、依赖、检索标签和所需工具：
+
+```yaml
+name: report
+description: 生成可靠报告
+version: 1.2.0
+dependencies: citations
+tags: report, 报告
+tools: web_search
+```
+
+Catalog 会拓扑加载依赖并拒绝循环。`discover()` 使用可解释的 BM25-like 排序；需要语义
+判断时可注入 `ModelSkillRouter`，但模型只能返回候选名称，最终仍经过白名单、去重、数量、
+依赖和工具权限检查。`tools` 是需求声明，不会自动注册或授权工具。
 
 文件由 frontmatter 和 Markdown 指令组成：
 
@@ -205,8 +254,9 @@ budget 和并行 scheduler 仍留在后续阶段。
 
 - ToolRegistry：工具权限、租户策略、lazy loader；
 - ConversationStore：加密、TTL、PostgreSQL；
-- ContextBuilder：精确 token budget、摘要、检索结果排序；
-- SkillCatalog：语义路由、依赖检查和版本信息；
+- ContextBuilder：接入具体 provider tokenizer 和摘要模型；
+- MemoryIndex：embedding、混合检索和 reranker；
+- SkillCatalog：远程 registry、签名与兼容性策略；
 - agentAsTool：结构化 handoff、深度预算和并行 scheduler。
 
 ## 三套实现的对应关系
@@ -218,5 +268,5 @@ budget 和并行 scheduler 仍留在后续阶段。
 | 会话 memory | JSON / `SqliteConversationStore` | JSON / `SqliteConversationStore` | 通用 JSON/SQLite store + pi messages |
 | Skill | `SkillCatalog` | Python `SkillCatalog` | 复用 TypeScript loader/catalog |
 | Timeout/retry | `ModelCallPolicy` | Python `ModelCallPolicy` | pi-ai 原生 stream options |
-| 最近轮次 Context | `RecentContextBuilder` | 待对齐 | 使用 pi-agent 原生 context |
+| Token/摘要 Context | `TokenContextBuilder` | `TokenContextBuilder` | pi-agent 原生 context + 通用 memory recall |
 | Sub-agent adapter | `agentAsTool` | 待对齐 | 待提供对照示例 |

@@ -19,6 +19,10 @@ Python 版位于 `python/from_scratch_agent/`，不依赖任何第三方运行�
 12. `runtime.py`：统一读取环境变量；
 13. `cli.py`：终端交互外壳。
 
+Stage 2/3 对照组件位于 `context_builder.py`、`memory_index.py` 和 `skills.py`：Python Agent
+现在也会在每次模型请求前调用 ContextBuilder，并支持 tokenizer、摘要、三类长期记忆、
+BM25-like Skill 发现、版本和依赖解析。
+
 ## 运行
 
 ```bash
@@ -39,6 +43,8 @@ Python CLI 与 TypeScript CLI 使用相同环境变量：
 AGENT_TOOLS=calculator,current_time
 AGENT_TOOL_EXECUTION=sequential
 AGENT_MEMORY_DATABASE=.agent-data/conversations.sqlite3
+AGENT_MEMORY_INDEX_DATABASE=.agent-data/memory-index.sqlite3
+AGENT_MEMORY_RECALL_LIMIT=5
 AGENT_SESSION_ID=python-cli
 AGENT_SKILLS_DIR=skills
 AGENT_SKILLS=tool-first

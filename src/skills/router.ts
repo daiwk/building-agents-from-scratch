@@ -1,7 +1,9 @@
 import type { AgentHooks, AgentMessage } from "../core/index.js";
+import type { SkillRouter } from "./types.js";
 import {
   SkillCatalog,
   applySkillsToSystemPrompt,
+  assertSkillToolsAvailable,
 } from "./catalog.js";
 
 export type DynamicSkillHookOptions = {
@@ -9,6 +11,8 @@ export type DynamicSkillHookOptions = {
   catalog: SkillCatalog;
   maxSkills?: number;
   minScore?: number;
+  router?: SkillRouter;
+  allowedToolNames?: string[];
 };
 
 /**
@@ -21,21 +25,57 @@ export function createDynamicSkillHook(
   options: DynamicSkillHookOptions,
 ): AgentHooks {
   return {
-    beforeModel(context) {
+    async beforeModel(context) {
       const latestUserInput = findLatestUserInput(context.messages);
       const skills = latestUserInput
-          ? options.catalog.discover(latestUserInput, {
-            limit: options.maxSkills ?? 3,
-            // 中文按单字做透明匹配，默认至少命中两个词，减少常见字误选。
-            minScore: options.minScore ?? 2,
-          })
+        ? options.router
+          ? await options.catalog.route(
+              latestUserInput,
+              options.router,
+              options.maxSkills ?? 3,
+            )
+          : options.catalog.discover(latestUserInput, {
+              limit: options.maxSkills ?? 3,
+              minScore: options.minScore ?? 0.05,
+            })
         : [];
+      if (options.allowedToolNames) {
+        assertSkillToolsAvailable(skills, options.allowedToolNames);
+      }
       context.systemPrompt = applySkillsToSystemPrompt(
         options.basePrompt,
         skills,
       );
     },
   };
+}
+
+/** 把任意模型调用函数包成受 Catalog 约束的 router，便于接 JSON mode 或专用分类模型。 */
+export class ModelSkillRouter implements SkillRouter {
+  constructor(
+    private readonly routeWithModel: (
+      query: string,
+      candidates: readonly {
+        name: string;
+        description: string;
+        version: string;
+      }[],
+      limit: number,
+    ) => Promise<string[]>,
+  ) {}
+
+  route(
+    query: string,
+    skills: Parameters<SkillRouter["route"]>[1],
+    limit: number,
+  ): Promise<string[]> {
+    const candidates = skills.map(({ name, description, version }) => ({
+      name,
+      description,
+      version,
+    }));
+    return this.routeWithModel(query, candidates, limit);
+  }
 }
 
 function findLatestUserInput(

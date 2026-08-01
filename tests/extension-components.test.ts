@@ -1,12 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   Agent,
+  ExtractiveSummaryProvider,
   RecentContextBuilder,
+  TokenContextBuilder,
   type AgentContext,
   type ModelProvider,
 } from "../src/core/index.js";
 import {
+  InMemoryMemoryIndex,
+  type MemoryRecord,
+} from "../src/memory/index.js";
+import {
+  ModelSkillRouter,
   SkillCatalog,
+  assertSkillToolsAvailable,
   createDynamicSkillHook,
   parseSkillMarkdown,
 } from "../src/skills/index.js";
@@ -98,6 +106,50 @@ describe("RecentContextBuilder", () => {
   });
 });
 
+describe("advanced memory", () => {
+  it("uses an injected token counter and summarizes omitted complete turns", async () => {
+    const context: AgentContext = {
+      systemPrompt: "system",
+      tools: [],
+      messages: [
+        { role: "user", content: "old" },
+        { role: "assistant", content: [{ type: "text", text: "answer" }], stopReason: "stop" },
+        { role: "user", content: "new" },
+      ],
+    };
+    const built = await new TokenContextBuilder({
+      maxTokens: 8,
+      tokenCounter: {
+        count: (text) => {
+          if (text === "[]") return 0;
+          if (text.includes("old")) return 7;
+          return Math.min(text.length, 2);
+        },
+      },
+      summarizer: new ExtractiveSummaryProvider(),
+    }).build(context);
+
+    expect(built.messages).toEqual([{ role: "user", content: "new" }]);
+    expect(built.systemPrompt).toContain("conversation_summary");
+    expect(context.messages).toHaveLength(3);
+  });
+
+  it("retrieves typed memories with deterministic ranking and filters", async () => {
+    const index = new InMemoryMemoryIndex();
+    const records: MemoryRecord[] = [
+      { id: "fact", kind: "semantic", content: "用户喜欢蓝色", createdAtUnixMs: 1 },
+      { id: "event", kind: "episodic", content: "昨天讨论红色", createdAtUnixMs: 2 },
+      { id: "rule", kind: "procedural", content: "回答颜色问题要简洁", createdAtUnixMs: 3 },
+    ];
+    for (const record of records) await index.upsert(record);
+
+    expect((await index.search("用户喜欢什么颜色", { kinds: ["semantic"] }))[0]?.id)
+      .toBe("fact");
+    await index.remove("fact");
+    expect(await index.search("蓝")).toEqual([]);
+  });
+});
+
 describe("dynamic Skill discovery", () => {
   it("discovers by description and rebuilds the prompt from its base", async () => {
     const concise = parseSkillMarkdown(
@@ -144,6 +196,24 @@ describe("dynamic Skill discovery", () => {
 
     expect(context.systemPrompt).toContain('<skill name="concise">');
     expect(context.systemPrompt).not.toContain("旧 prompt");
+  });
+
+  it("resolves dependencies and constrains model-selected names", async () => {
+    const base = parseSkillMarkdown(
+      "---\nname: base\ndescription: 基础格式\nversion: 1.2.0\n---\n基础规则。",
+      "virtual/base/SKILL.md",
+    );
+    const child = parseSkillMarkdown(
+      "---\nname: child\ndescription: 专业分析\ndependencies: base\ntags: 分析, research\ntools: calculator\n---\n执行分析。",
+      "virtual/child/SKILL.md",
+    );
+    const catalog = new SkillCatalog().registerMany([base, child]);
+    expect(catalog.select(["child"]).map((skill) => skill.name)).toEqual(["base", "child"]);
+    expect(child.requiredTools).toEqual(["calculator"]);
+    expect(() => assertSkillToolsAvailable([child], [])).toThrow("unavailable tools");
+    const router = new ModelSkillRouter(async () => ["child", "unknown"]);
+    await expect(catalog.route("分析", router, 1)).resolves.toEqual([base, child]);
+    expect(catalog.discover("请做专业分析", { limit: 1 })[0]?.name).toBe("child");
   });
 });
 

@@ -204,6 +204,56 @@ print("✓ 所有检查通过：Agent loop 完整闭合")
     ),
     markdown(
         """
+## Stage 2/3：Memory 与 Skills
+
+下面继续用离线组件观察三层 memory 和版本化 Skill。真实 tokenizer、摘要模型或模型路由
+都通过小接口注入，不会藏进 Agent loop。
+"""
+    ),
+    code(
+        """
+from from_scratch_agent import (
+    ExtractiveSummaryProvider,
+    InMemoryMemoryIndex,
+    MemoryRecord,
+    SkillCatalog,
+    TokenContextBuilder,
+)
+from from_scratch_agent.skills import parse_skill_markdown
+
+class CharacterCounter:
+    def count(self, text):
+        return len(text)
+
+token_context = TokenContextBuilder(
+    max_tokens=80,
+    token_counter=CharacterCounter(),
+    summarizer=ExtractiveSummaryProvider(),
+)
+
+memory_index = InMemoryMemoryIndex()
+memory_index.upsert(MemoryRecord("preference", "semantic", "用户喜欢中文回答"))
+memory_index.upsert(MemoryRecord("release-rule", "procedural", "发布前必须运行测试"))
+print([(item.kind, item.content) for item in memory_index.search("如何用中文回答")])
+"""
+    ),
+    code(
+        """
+base_skill = parse_skill_markdown(
+    "---\\nname: base\\ndescription: 基础格式\\nversion: 1.0.0\\n---\\n保持结构清晰。",
+    "base/SKILL.md",
+)
+report_skill = parse_skill_markdown(
+    "---\\nname: report\\ndescription: 生成分析报告\\ndependencies: base\\ntags: 报告, analysis\\n---\\n先给结论再给证据。",
+    "report/SKILL.md",
+)
+skill_catalog = SkillCatalog().register_many([base_skill, report_skill])
+print("依赖顺序：", [skill.name for skill in skill_catalog.select(["report"])])
+print("自动发现：", [skill.name for skill in skill_catalog.discover("写分析报告")])
+"""
+    ),
+    markdown(
+        """
 ### 7. 可选：调用真实 MiniMax
 
 只有同时设置 `MINIMAX_API_KEY` 和 `RUN_LIVE_MINIMAX=1` 才会真正请求网络。这样重新执行
