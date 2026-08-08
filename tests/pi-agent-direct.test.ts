@@ -53,12 +53,23 @@ describe("pi-agent feature parity", () => {
     delete process.env.PI_AGENT_SESSION_ID;
     delete process.env.PI_AGENT_TOOL_EXECUTION;
 
-    const agent = await createPiAgent({ systemPrompt: "候选版本 prompt" });
+    const agent = await createPiAgent({
+      systemPrompt: "候选版本 prompt",
+      governedMemories: [{
+        memoryId: "csv-rule",
+        version: 2,
+        scope: "csv-import",
+        lesson: "CSV 导入使用支持引号的 parser。",
+        sourceEpisodeIds: ["episode-1", "episode-2"],
+      }],
+    });
 
     expect(agent.state.tools.map((tool) => tool.name)).toEqual(["calculator", "read_file"]);
     expect(agent.state.tools.map((tool) => tool.name)).not.toContain("write_file");
     expect(agent.state.systemPrompt).toContain('<skill name="tool-first">');
     expect(agent.state.systemPrompt).toContain("候选版本 prompt");
+    expect(agent.state.systemPrompt).toContain('<governed_memory id="csv-rule" version="2"');
+    expect(agent.state.systemPrompt).toContain('sources="episode-1,episode-2"');
     expect(agent.state.messages).toHaveLength(1);
     expect(agent.state.messages[0]).toMatchObject({
       role: "user",

@@ -48,6 +48,10 @@ import {
   scopeTenantSessionId,
   type Principal,
 } from "../src/security/index.js";
+import {
+  applyGovernedMemoriesToPrompt,
+  type ActiveMemory,
+} from "../src/memory-consolidation/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -143,7 +147,11 @@ class PiToolRegistry {
  * 直接使用 pi-agent，但复用项目的 memory/skill 文件格式与环境变量语义。
  */
 export async function createPiAgent(
-  options: { systemPrompt?: string } = {},
+  options: {
+    systemPrompt?: string;
+    /** 这里只接受 GovernedMemoryBank.active(tags) 返回的 gated memory。 */
+    governedMemories?: readonly ActiveMemory[];
+  } = {},
 ): Promise<PiAgent> {
   const secrets = new EnvironmentSecretProvider();
   const principal: Principal = {
@@ -220,8 +228,10 @@ export async function createPiAgent(
   for (const skill of skillConfiguration.selected) authorize(principal, `skill:${skill.name}`);
   // Stage 6 的 prompt artifact 通过这个显式入口进入隔离评测实例，
   // 不会修改已运行 Agent 的线上 prompt。
-  const basePrompt = options.systemPrompt ??
-    "你是一个可靠的助手；精确计算和当前时间必须使用工具。";
+  const basePrompt = applyGovernedMemoriesToPrompt(
+    options.systemPrompt ?? "你是一个可靠的助手；精确计算和当前时间必须使用工具。",
+    options.governedMemories ?? [],
+  );
   const rawSessionId =
     process.env.PI_AGENT_SESSION_ID ??
     process.env.AGENT_SESSION_ID ??

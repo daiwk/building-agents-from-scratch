@@ -95,6 +95,10 @@ Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前�
 `tracing.py` 只使用标准库，并与 TypeScript 输出相同的 JSON 字段。一次 run、每次模型调用
 和工具执行形成父子 span；不设置 `AGENT_TRACE_FILE` 时不会创建文件，也没有额外运行开销。
 
+`memory_consolidation.py` 是 Stage 16 的同构实现，同样包含不可变 episode、反例、replay
+gate、人工激活和 rollback。它没有依赖向量库或 LLM，方便在单元测试和 Notebook 中逐步
+替换 evaluator；`apply_governed_memories_to_prompt()` 只接受 `active(tags)` 返回的记忆。
+
 Stage 15 的 `security.py` 同样只用标准库，提供 hashed API Key、RBAC、tenant session key、
 `*_FILE` secret 和 JSONL audit。把 `Principal` 传给 `create_agent_from_env()` 后，runtime 会
 在 tool、skill、workspace 装配前授权，并自动把外部 session id 映射到租户命名空间。

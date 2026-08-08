@@ -48,7 +48,7 @@ describe("web server", () => {
     };
     expect(catalog.demos.map((item) => item.id)).toContain("evolution");
     expect(catalog.demos.map((item) => item.id)).toEqual(expect.arrayContaining([
-      "mcp", "structured", "durable",
+      "mcp", "structured", "durable", "memory-consolidation",
     ]));
     const run = await fetch(`${baseUrl}/api/playground/run`, {
       method: "POST",
@@ -64,6 +64,14 @@ describe("web server", () => {
     });
     expect(await durable.json()).toMatchObject({
       id: "durable", result: { status: "completed", result: { value: 10 } },
+    });
+    const consolidation = await fetch(`${baseUrl}/api/playground/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ demo: "memory-consolidation" }),
+    });
+    expect(await consolidation.json()).toMatchObject({
+      id: "memory-consolidation", result: { rejected: true, active: [{ version: 2 }] },
     });
   });
 

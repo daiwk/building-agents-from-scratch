@@ -269,8 +269,24 @@ provider 后才启用混合排名。引用来自摄取时保存的 metadata，�
 本地未配置认证文件时仍保持一键运行，但只绑定 `127.0.0.1`；Compose 模板会强制加载认证
 配置。教学版 hashed API Key 不替代企业 OIDC/KMS/策略引擎，生产边界详见安全与部署章节。
 
-## Stage 16–18（远期）
+## Stage 16：证据优先的 Memory Consolidation（已完成）
 
-- Stage 16：MCP Resources/Prompts、远程 transport、连接健康检查与能力缓存；
-- Stage 17：人工反馈数据台、经过校准的 LLM judge 与线上/离线指标联动；
-- Stage 18：分布式 scheduler、worker heartbeat、dead-letter queue 与水平扩缩容。
+这一阶段受 2026 年论文
+[Useful Memories Become Faulty When Continuously Updated by LLMs](https://arxiv.org/abs/2605.12978)
+启发，重点不是增加另一种摘要器，而是防止持续重写让有用记忆逐步失真：
+
+- ~~不可覆盖的原始 episode store~~；
+- ~~支持证据、反例与明确 applicability~~；
+- ~~支持数量、不同 task 数量和边界检查~~；
+- ~~固定 replay 的 improvement/regression gate~~；
+- ~~人工身份激活、版本历史和 rollback~~；
+- ~~TypeScript、Python、pi-agent prompt adapter 与 Web Playground 对照实现~~。
+
+LLM 可以提出候选，但不能删除 episode、绕过 gate 或直接切换 active version。当前标签由
+宿主显式提供；自动聚类、语义 embedding 和线上统计监控留给后续扩展。
+
+## Stage 17–19（远期）
+
+- Stage 17：MCP Resources/Prompts、远程 transport、连接健康检查与能力缓存；
+- Stage 18：人工反馈数据台、经过校准的 LLM judge 与线上/离线指标联动；
+- Stage 19：分布式 scheduler、worker heartbeat、dead-letter queue 与水平扩缩容。

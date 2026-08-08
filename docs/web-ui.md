@@ -51,6 +51,10 @@ total token；配置单价后也会显示对应币种的估算成本。它同时
 开启并行工具后，右侧会先出现同一轮的多张 `TOOL CALL` 卡片；工具完成事件仍按模型 call
 顺序展示，与写入 Context 的顺序一致。
 
+`/playground.html` 的 **Memory gate** 是 Stage 16 的确定性演示：先用过宽标签提出一条错误
+规则，观察 JSON 反例和 replay regression 如何拒绝它；再缩窄适用边界并激活可回滚版本。
+整个过程不调用模型，也不需要 API Key。
+
 ## 为什么使用 NDJSON
 
 每个事件是一行 JSON，浏览器可以边读取边渲染，不必等待完整响应。模型服务到 Node
