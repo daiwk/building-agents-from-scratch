@@ -147,3 +147,10 @@ AGENT_TRACE_FILE=.agent-data/traces.jsonl
 `gen_ai.chat` 和 `execute_tool <name>` 子 span。默认不保存 prompt、工具参数和结果。
 `TraceExporter` 是可替换接口，JSONL 只用于教学和单机调试；完整字段与接入生产 OTel 的
 边界见“可观测性与 Trace”。
+
+## Stage 16：Governed Memory
+
+`src/memory-consolidation/index.ts` 把原始 `Episode` 与抽象
+`ConsolidationCandidate` 分开保存。`evaluate()` 检查支持证据、反例、适用标签和固定 replay；
+只有通过 gate 的版本才能由带身份的调用者 `activate()`。当前任务标签传给 `active(tags)` 后，
+再用 `applyGovernedMemoriesToPrompt()` 注入带 episode 引用的记忆。

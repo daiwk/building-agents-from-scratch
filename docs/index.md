@@ -64,7 +64,7 @@ Agent 和普通聊天的关键区别不是 system prompt，而是上图中最后
 - 一个能看见 model、tool call、tool result 和完成状态的 Web UI；
 - 可按名称授权的 ToolRegistry、可持久化 ConversationStore 和 SKILL.md loader；
 - 从 memory、sub-agent、graph 到受控 self-evolve 的完整扩展路线。
-- 一个离线 Component Lab，可视化运行 Stage 2–12 的核心组件。
+- 一个离线 Component Lab，可视化运行 Stage 2–16 的核心组件。
 - 可复现 trace eval 和限定目录的安全 workspace tools。
 - MCP、结构化输出、模型路由和可重启的 SQLite durable runtime。
 

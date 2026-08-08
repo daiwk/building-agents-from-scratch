@@ -101,6 +101,20 @@ from .security import (
     hash_api_key,
     scope_tenant_session_id,
 )
+from .memory_consolidation import (
+    ActiveMemory,
+    Applicability,
+    ConsolidationCandidate,
+    ConsolidationRelease,
+    ConsolidationReplayCase,
+    ConsolidationReport,
+    Episode,
+    EvidenceLink,
+    GovernedMemoryBank,
+    ReplayResult,
+    applies_to,
+    apply_governed_memories_to_prompt,
+)
 from .workspace import (
     FileArtifact,
     InMemoryFileArtifactStore,
@@ -233,4 +247,16 @@ __all__ = [
     "create_authenticator_from_environment",
     "hash_api_key",
     "scope_tenant_session_id",
+    "ActiveMemory",
+    "Applicability",
+    "ConsolidationCandidate",
+    "ConsolidationRelease",
+    "ConsolidationReplayCase",
+    "ConsolidationReport",
+    "Episode",
+    "EvidenceLink",
+    "GovernedMemoryBank",
+    "ReplayResult",
+    "applies_to",
+    "apply_governed_memories_to_prompt",
 ]

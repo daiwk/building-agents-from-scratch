@@ -9,6 +9,7 @@ import { McpClient, type McpRequestTransport } from "../mcp/index.js";
 import { generateStructured } from "../structured-output/index.js";
 import { ModelRouter } from "../routing/index.js";
 import { DurableTaskRunner, SqliteDurableTaskStore } from "../durable/index.js";
+import { GovernedMemoryBank, type Episode } from "../memory-consolidation/index.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +24,8 @@ export type PlaygroundDemoName =
   | "workspace"
   | "mcp"
   | "structured"
-  | "durable";
+  | "durable"
+  | "memory-consolidation";
 
 export const PLAYGROUND_DEMOS = [
   { id: "memory", stage: "02", title: "Memory", description: "完整历史如何变成本轮 Context" },
@@ -36,6 +38,7 @@ export const PLAYGROUND_DEMOS = [
   { id: "mcp", stage: "10", title: "MCP", description: "发现、白名单、调用与脱敏" },
   { id: "structured", stage: "11", title: "Route & JSON", description: "结构化 repair、路由与 fallback" },
   { id: "durable", stage: "12", title: "Durable", description: "SQLite task、lease 与事件恢复" },
+  { id: "memory-consolidation", stage: "16", title: "Memory gate", description: "原始 episode、反例、回放与回滚" },
 ] as const;
 
 export async function runPlaygroundDemo(name: string) {
@@ -49,6 +52,7 @@ export async function runPlaygroundDemo(name: string) {
   if (name === "mcp") return mcpDemo();
   if (name === "structured") return structuredDemo();
   if (name === "durable") return durableDemo();
+  if (name === "memory-consolidation") return memoryConsolidationDemo();
   throw new Error(`Unknown playground demo: ${name}`);
 }
 
@@ -256,6 +260,51 @@ async function durableDemo() {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+async function memoryConsolidationDemo() {
+  const bank = new GovernedMemoryBank();
+  const makeEpisode = (id: string, taskId: string, tags: string[], scope: string): Episode => ({
+    id, taskId, tags, scope, input: `处理 ${id}`, trajectory: `raw trace: ${id}`,
+    outcome: "success", createdAt: "2026-08-01T00:00:00Z",
+  });
+  bank.retain(makeEpisode("csv-1", "task-a", ["data", "csv"], "csv-import"));
+  bank.retain(makeEpisode("csv-2", "task-b", ["data", "csv", "quoted"], "csv-import"));
+  bank.retain(makeEpisode("json-1", "task-c", ["data", "json"], "json-import"));
+  const evidence = [
+    { episodeId: "csv-1", relation: "support" as const },
+    { episodeId: "csv-2", relation: "support" as const },
+    { episodeId: "json-1", relation: "counterexample" as const },
+  ];
+  const cases = [
+    { id: "new-csv", tags: ["data", "csv"], shouldApply: true, baselinePassed: false },
+    { id: "known-csv", tags: ["data", "csv", "quoted"], shouldApply: true, baselinePassed: true },
+    { id: "json-boundary", tags: ["data", "json"], shouldApply: false, baselinePassed: true },
+  ];
+  const bad = bank.propose({
+    memoryId: "import-rule", scope: "csv-import", lesson: "所有数据都按逗号切分。",
+    applicability: { allTags: ["data"], noneTags: [] }, evidence,
+    rationale: "从两条 CSV 成功轨迹提炼。",
+  });
+  const rejected = await bank.evaluate(bad.id, cases, (_candidate, testCase) =>
+    testCase.id !== "json-boundary"
+  );
+  bank.reject(bad.id, "playground-reviewer");
+  const bounded = bank.propose({
+    memoryId: "import-rule", scope: "csv-import", lesson: "CSV 导入使用支持引号字段的 parser。",
+    applicability: { allTags: ["data", "csv"], noneTags: ["json"] }, evidence,
+    rationale: "显式保留 CSV 边界和 JSON 反例。",
+  });
+  const gated = await bank.evaluate(bounded.id, cases, (_candidate, testCase) =>
+    testCase.id === "new-csv" ? true : testCase.baselinePassed
+  );
+  bank.activate(bounded.id, "playground-reviewer");
+  const active = bank.active(["data", "csv"]);
+  return demo("memory-consolidation", "原始轨迹永不被抽象覆盖；只有带反例且回放无回归的候选才能激活。", [
+    step("Retain episodes", "保留两条支持证据和一条边界反例", ["csv-1", "csv-2", "json-1"]),
+    step("Reject overgeneralization", "过宽 applicability 会命中 JSON 并造成回放回归", rejected.report),
+    step("Gate & activate", "缩窄适用条件后，人工身份激活可回滚版本", { report: gated.report, active }),
+  ], { rejected: !rejected.report?.passed, active });
 }
 
 function step(label: string, detail: string, data: unknown) {

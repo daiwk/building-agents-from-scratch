@@ -76,6 +76,7 @@ npm run web
 [http://127.0.0.1:3000/playground.html](http://127.0.0.1:3000/playground.html)，
 不需要 API Key，可以逐步观察 Memory、Skills、Sub-agent、Graph、Eval、Workspace、MCP、
 Structured Output、模型路由和 Durable Runtime。
+Stage 16 的 **Memory gate** 还能直接观察一次过度概括如何被反例与 replay 拒绝。
 
 如果更喜欢终端，也可以运行：
 
@@ -256,7 +257,7 @@ src/
 
 web/
 ├── index.html            # 零框架页面
-├── playground.html       # Stage 2–12 组件实验台
+├── playground.html       # Stage 2–16 组件实验台
 ├── styles.css
 └── app.js
 
@@ -269,9 +270,11 @@ mkdocs.yml
 
 Python 与 pi-agent 对照版也支持工具选择、JSON/SQLite 会话 memory、分类 MemoryIndex、
 版本化 SKILL.md、模型调用可靠性、单次任务预算和 OpenTelemetry-compatible trace。
-Stage 13–15 还加入了带引用的混合检索、受限文件 Artifact、图片 content block，以及
+Stage 13–16 还加入了带引用的混合检索、受限文件 Artifact、图片 content block，以及
 hashed API Key、租户隔离、RBAC、secret provider、审计和最小权限容器模板；
 Web UI 可以直接上传文本或图片并观察它们如何进入模型消息。
+论文启发的 memory consolidation 会保留不可变 episode，用支持证据、反例和 replay gate
+约束抽象记忆，再通过人工身份激活或回滚版本。
 Stage 6 的 EvolutionController 同时提供 TypeScript/Python 实现；pi-agent 可通过隔离的
 system prompt 实例参与相同 evaluator。
 三套实现使用相同 `AGENT_*` 环境变量；pi-agent 需要隔离时可用 `PI_AGENT_*`
@@ -304,7 +307,7 @@ system prompt 实例参与相同 evaluator。
 详细路线见 [`docs/roadmap.md`](docs/roadmap.md)，接口关系见
 [`docs/architecture.md`](docs/architecture.md)。
 
-Stage 0–15 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
+Stage 0–16 的教学闭环已经完成。后续可以把各个小接口替换成生产实现，例如持久化
 ArtifactStore、组织审批系统、经过人工标注验证的 LLM judge，以及发布后的在线监控。
 
 ## 验证

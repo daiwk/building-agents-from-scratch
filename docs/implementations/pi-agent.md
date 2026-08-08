@@ -130,5 +130,9 @@ Principal。选中的 tool、动态 Skill 和 workspace 会经过同一个 RBAC�
 memory session 也会自动按 tenant 做 SHA-256 命名空间隔离。MiniMax Key 支持
 `MINIMAX_API_KEY_FILE`，Agent/tool 生命周期事件会写入同一个 tenant-scoped audit sink。
 
+Stage 16 不改写 pi-agent 内部 loop。宿主先运行 `GovernedMemoryBank` 的证据与 replay gate，
+再把 `bank.active(currentTags)` 作为 `createPiAgent({ governedMemories })` 传入。这样 pi-agent
+只看到已经激活且适用于当前任务的版本，并在 prompt 中保留原始 episode id。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。
