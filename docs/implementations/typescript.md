@@ -154,3 +154,10 @@ AGENT_TRACE_FILE=.agent-data/traces.jsonl
 `ConsolidationCandidate` 分开保存。`evaluate()` 检查支持证据、反例、适用标签和固定 replay；
 只有通过 gate 的版本才能由带身份的调用者 `activate()`。当前任务标签传给 `active(tags)` 后，
 再用 `applyGovernedMemoriesToPrompt()` 注入带 episode 引用的记忆。
+
+## Stage 17：Regularized RSI
+
+`src/rsi/index.ts` 在 Stage 6 之上增加多轮 lineage。`proposalContext()` 只暴露公开反馈、
+退火 edit budget、负证据和探索/剪枝提示；私有 `selectionScore` 留在固定 selector。
+`evaluate()` 执行噪声、成本、token 和 safety gate，`select()` 才能把 winner 变成下一轮 parent。
+模型提供的是声明式 atomic edit metadata，本模块不会执行模型生成的任意代码或 diff。

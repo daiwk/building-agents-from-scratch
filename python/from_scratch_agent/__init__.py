@@ -115,6 +115,19 @@ from .memory_consolidation import (
     applies_to,
     apply_governed_memories_to_prompt,
 )
+from .rsi import (
+    AtomicHarnessEdit,
+    EditHistoryRecord,
+    HarnessGrade,
+    HarnessVersion,
+    PublicHarnessGrade,
+    RegularizedRsiController,
+    RsiCandidate,
+    RsiPolicy,
+    RsiProposalContext,
+    RsiSelection,
+    calibrate_noise_band,
+)
 from .workspace import (
     FileArtifact,
     InMemoryFileArtifactStore,
@@ -259,4 +272,15 @@ __all__ = [
     "ReplayResult",
     "applies_to",
     "apply_governed_memories_to_prompt",
+    "AtomicHarnessEdit",
+    "EditHistoryRecord",
+    "HarnessGrade",
+    "HarnessVersion",
+    "PublicHarnessGrade",
+    "RegularizedRsiController",
+    "RsiCandidate",
+    "RsiPolicy",
+    "RsiProposalContext",
+    "RsiSelection",
+    "calibrate_noise_band",
 ]

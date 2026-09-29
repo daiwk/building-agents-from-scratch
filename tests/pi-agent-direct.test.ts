@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentMessage as PiAgentMessage } from "@earendil-works/pi-agent-core";
 import { afterEach, describe, expect, it } from "vitest";
-import { createPiAgent } from "../examples/pi-agent-direct.js";
+import { createPiAgent, createPiAgentFromHarness } from "../examples/pi-agent-direct.js";
 import { SqliteConversationStore } from "../src/memory/index.js";
 
 const temporaryDirectories: string[] = [];
@@ -76,5 +76,11 @@ describe("pi-agent feature parity", () => {
       content: "上一轮消息",
     });
     expect(agent.toolExecution).toBe("parallel");
+
+    const evolved = await createPiAgentFromHarness({
+      id: "research-agent", version: 3, parentVersion: 2,
+      content: "accepted RSI harness", createdAt: "2026-09-01T00:00:00Z",
+    });
+    expect(evolved.state.systemPrompt).toContain("accepted RSI harness");
   });
 });

@@ -134,5 +134,10 @@ Stage 16 不改写 pi-agent 内部 loop。宿主先运行 `GovernedMemoryBank` �
 再把 `bank.active(currentTags)` 作为 `createPiAgent({ governedMemories })` 传入。这样 pi-agent
 只看到已经激活且适用于当前任务的版本，并在 prompt 中保留原始 episode id。
 
+Stage 17 的 `createPiAgentFromHarness(incumbent)` 接受固定 selector 返回的 immutable
+`HarnessVersion`，为 baseline/candidate 分别创建隔离的 pi-agent 实例。pi-agent 负责内部
+agent loop；RSI controller 负责跨版本 history、预算、私有评分、选择和 rollback，两层不会
+互相授予额外权限。
+
 !!! warning "Node.js 版本"
     当前 pi-agent 包要求 Node.js 22.19 或更高版本。

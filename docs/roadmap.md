@@ -285,8 +285,27 @@ provider 后才启用混合排名。引用来自摄取时保存的 metadata，�
 LLM 可以提出候选，但不能删除 episode、绕过 gate 或直接切换 active version。当前标签由
 宿主显式提供；自动聚类、语义 embedding 和线上统计监控留给后续扩展。
 
-## Stage 17–19（远期）
+## Stage 17：Regularized Recursive Self-Improvement（已完成）
 
-- Stage 17：MCP Resources/Prompts、远程 transport、连接健康检查与能力缓存；
-- Stage 18：人工反馈数据台、经过校准的 LLM judge 与线上/离线指标联动；
-- Stage 19：分布式 scheduler、worker heartbeat、dead-letter queue 与水平扩缩容。
+综合 2026 年 9 月的
+[AIDE²](https://arxiv.org/abs/2609.26457) 与
+[RRSI](https://arxiv.org/abs/2609.24972)，把 Stage 6 的单次 candidate gate 扩展成真正的多轮
+harness lineage：
+
+- ~~accepted harness 成为下一轮唯一 parent~~；
+- ~~公开反馈与私有 selection score 分离~~；
+- ~~cosine annealed atomic edit budget~~；
+- ~~benchmark leakage 与 inert edit 的评测前筛查~~；
+- ~~noise-adjusted floor、固定 token budget 和 gain-dependent cost gate~~；
+- ~~跨轮负证据、underexplored component 和 structural pruning target~~；
+- ~~人工 selection identity、immutable lineage 与 rollback~~；
+- ~~TypeScript、Python、pi-agent adapter 与无 API Key Playground~~。
+
+这里的 RSI 是 frozen model 外部的 harness RSI，不允许模型改 selector、安全 gate、私有数据或
+授权边界。实现是论文启发的教学抽象，不等于复现论文完整实验。
+
+## Stage 18–20（远期）
+
+- Stage 18：MCP Resources/Prompts、远程 transport、连接健康检查与能力缓存；
+- Stage 19：人工反馈数据台、经过校准的 LLM judge 与线上/离线指标联动；
+- Stage 20：分布式 scheduler、worker heartbeat、dead-letter queue 与水平扩缩容。

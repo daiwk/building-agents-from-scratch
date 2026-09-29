@@ -52,6 +52,7 @@ import {
   applyGovernedMemoriesToPrompt,
   type ActiveMemory,
 } from "../src/memory-consolidation/index.js";
+import type { HarnessVersion } from "../src/rsi/index.js";
 
 if (existsSync(".env")) loadEnvFile(".env");
 
@@ -146,13 +147,13 @@ class PiToolRegistry {
 /**
  * 直接使用 pi-agent，但复用项目的 memory/skill 文件格式与环境变量语义。
  */
-export async function createPiAgent(
-  options: {
-    systemPrompt?: string;
-    /** 这里只接受 GovernedMemoryBank.active(tags) 返回的 gated memory。 */
-    governedMemories?: readonly ActiveMemory[];
-  } = {},
-): Promise<PiAgent> {
+export type PiAgentOptions = {
+  systemPrompt?: string;
+  /** 这里只接受 GovernedMemoryBank.active(tags) 返回的 gated memory。 */
+  governedMemories?: readonly ActiveMemory[];
+};
+
+export async function createPiAgent(options: PiAgentOptions = {}): Promise<PiAgent> {
   const secrets = new EnvironmentSecretProvider();
   const principal: Principal = {
     subject: process.env.PI_AGENT_SUBJECT ?? "pi-cli",
@@ -461,6 +462,15 @@ export async function createPiAgent(
 
   if (mcpClient) piMcpClients.set(agent, mcpClient);
   return agent;
+}
+
+/** Stage 17 adapter：每轮都从 selector 返回的 immutable incumbent 创建隔离实例。 */
+export function createPiAgentFromHarness(
+  incumbent: Readonly<HarnessVersion>,
+  options: Omit<PiAgentOptions, "systemPrompt"> = {},
+): Promise<PiAgent> {
+  if (!incumbent.content.trim()) throw new Error("RSI incumbent content is required.");
+  return createPiAgent({ ...options, systemPrompt: incumbent.content });
 }
 
 export async function closePiAgentResources(agent: PiAgent): Promise<void> {

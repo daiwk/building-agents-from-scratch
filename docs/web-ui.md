@@ -55,6 +55,10 @@ total token；配置单价后也会显示对应币种的估算成本。它同时
 规则，观察 JSON 反例和 replay regression 如何拒绝它；再缩窄适用边界并激活可回滚版本。
 整个过程不调用模型，也不需要 API Key。
 
+Stage 17 的 **Regularized RSI** 继续展示多轮 lineage：泄漏候选在评分前被筛掉，高分但
+token 成本翻倍的候选被 cost gate 拒绝，只有通用修改成为下一轮 parent。私有 selection
+score 不会出现在 proposer context 中。
+
 ## 为什么使用 NDJSON
 
 每个事件是一行 JSON，浏览器可以边读取边渲染，不必等待完整响应。模型服务到 Node
