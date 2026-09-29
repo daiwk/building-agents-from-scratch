@@ -99,6 +99,10 @@ Python 的 `ModelRateLimiter` 同样跨多次 `run()` 共享，并在等待前�
 gate、人工激活和 rollback。它没有依赖向量库或 LLM，方便在单元测试和 Notebook 中逐步
 替换 evaluator；`apply_governed_memories_to_prompt()` 只接受 `active(tags)` 返回的记忆。
 
+Stage 17 的 `rsi.py` 同样只使用标准库。`RegularizedRsiController` 保存 immutable lineage、
+atomic edit history、退火预算和保守 selector；grader 是普通 callable，可以先用单元测试中的
+确定性字典，再替换成真实 benchmark runner。`proposal_context()` 特意不返回私有选择分数。
+
 Stage 15 的 `security.py` 同样只用标准库，提供 hashed API Key、RBAC、tenant session key、
 `*_FILE` secret 和 JSONL audit。把 `Principal` 传给 `create_agent_from_env()` 后，runtime 会
 在 tool、skill、workspace 装配前授权，并自动把外部 session id 映射到租户命名空间。

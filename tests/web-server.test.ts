@@ -48,7 +48,7 @@ describe("web server", () => {
     };
     expect(catalog.demos.map((item) => item.id)).toContain("evolution");
     expect(catalog.demos.map((item) => item.id)).toEqual(expect.arrayContaining([
-      "mcp", "structured", "durable", "memory-consolidation",
+      "mcp", "structured", "durable", "memory-consolidation", "rsi",
     ]));
     const run = await fetch(`${baseUrl}/api/playground/run`, {
       method: "POST",
@@ -72,6 +72,14 @@ describe("web server", () => {
     });
     expect(await consolidation.json()).toMatchObject({
       id: "memory-consolidation", result: { rejected: true, active: [{ version: 2 }] },
+    });
+    const rsi = await fetch(`${baseUrl}/api/playground/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ demo: "rsi" }),
+    });
+    expect(await rsi.json()).toMatchObject({
+      id: "rsi", result: { versions: [1, 2, 3], secondWinner: { parentVersion: 2 } },
     });
   });
 

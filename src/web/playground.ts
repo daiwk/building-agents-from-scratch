@@ -10,6 +10,7 @@ import { generateStructured } from "../structured-output/index.js";
 import { ModelRouter } from "../routing/index.js";
 import { DurableTaskRunner, SqliteDurableTaskStore } from "../durable/index.js";
 import { GovernedMemoryBank, type Episode } from "../memory-consolidation/index.js";
+import { RegularizedRsiController, type AtomicHarnessEdit } from "../rsi/index.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,7 +26,8 @@ export type PlaygroundDemoName =
   | "mcp"
   | "structured"
   | "durable"
-  | "memory-consolidation";
+  | "memory-consolidation"
+  | "rsi";
 
 export const PLAYGROUND_DEMOS = [
   { id: "memory", stage: "02", title: "Memory", description: "完整历史如何变成本轮 Context" },
@@ -39,6 +41,7 @@ export const PLAYGROUND_DEMOS = [
   { id: "structured", stage: "11", title: "Route & JSON", description: "结构化 repair、路由与 fallback" },
   { id: "durable", stage: "12", title: "Durable", description: "SQLite task、lease 与事件恢复" },
   { id: "memory-consolidation", stage: "16", title: "Memory gate", description: "原始 episode、反例、回放与回滚" },
+  { id: "rsi", stage: "17", title: "Regularized RSI", description: "递归 lineage、泄漏筛查、退火预算与保守选择" },
 ] as const;
 
 export async function runPlaygroundDemo(name: string) {
@@ -53,6 +56,7 @@ export async function runPlaygroundDemo(name: string) {
   if (name === "structured") return structuredDemo();
   if (name === "durable") return durableDemo();
   if (name === "memory-consolidation") return memoryConsolidationDemo();
+  if (name === "rsi") return rsiDemo();
   throw new Error(`Unknown playground demo: ${name}`);
 }
 
@@ -305,6 +309,39 @@ async function memoryConsolidationDemo() {
     step("Reject overgeneralization", "过宽 applicability 会命中 JSON 并造成回放回归", rejected.report),
     step("Gate & activate", "缩窄适用条件后，人工身份激活可回滚版本", { report: gated.report, active }),
   ], { rejected: !rejected.report?.passed, active });
+}
+
+async function rsiDemo() {
+  const grades = {
+    expensive: { publicScore: 0.62, selectionScore: 0.60, policyTokens: 200, safetyPassed: true },
+    reusable: { publicScore: 0.59, selectionScore: 0.58, policyTokens: 105, safetyPassed: true },
+    recursive: { publicScore: 0.64, selectionScore: 0.63, policyTokens: 106, safetyPassed: true },
+  } as const;
+  const controller = new RegularizedRsiController(
+    { id: "agent", version: 1, content: "base", createdAt: "2026-09-01T00:00:00Z" },
+    { publicScore: 0.5, selectionScore: 0.5, policyTokens: 100, safetyPassed: true },
+    async (harness) => grades[harness.content as keyof typeof grades],
+    { totalRounds: 4, minEditBudget: 1, maxEditBudget: 3 },
+    ["private-answer"],
+  );
+  const edit = (id: string, component: AtomicHarnessEdit["component"], diff: string): AtomicHarnessEdit => ({
+    id, component, operation: "update", hypothesis: `test ${id}`,
+    description: `change ${id}`, sourceDiff: diff,
+  });
+  const leaked = controller.propose("leak", [edit("leak", "prompt", "+private-answer")]);
+  const expensive = controller.propose("expensive", [edit("loops", "control_flow", "+loops")]);
+  const reusable = controller.propose("reusable", [edit("retry", "config", "+bounded retry")]);
+  const expensiveReport = await controller.evaluate(expensive.id);
+  const reusableReport = await controller.evaluate(reusable.id);
+  const firstWinner = controller.select([leaked.id, expensive.id, reusable.id], "playground-reviewer");
+  const recursive = controller.propose("recursive", [edit("checklist", "skill", "+generic checklist")]);
+  await controller.evaluate(recursive.id);
+  const secondWinner = controller.select([recursive.id], "playground-reviewer");
+  return demo("rsi", "只有通过固定 selector 的 harness 才成为下一轮 parent；模型不能改 selector、预算或私有评分。", [
+    step("Screen", "包含私有答案的候选在评测前拒绝", leaked),
+    step("Regularize", "高分但成本翻倍的候选不进入 lineage", expensiveReport.selection),
+    step("Recurse", "可复用修改成为 v2，下一轮只能基于 v2 提出 v3", { reusable: reusableReport.selection, lineage: controller.lineage() }),
+  ], { firstWinner, secondWinner, versions: controller.lineage().map((item) => item.version) });
 }
 
 function step(label: string, detail: string, data: unknown) {
